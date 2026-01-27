@@ -11,7 +11,7 @@
   
 - [ ] **📥 Импорты**
   - [ ] Файлы с Telegram API импортируют `safe_call` или `_safe_api_call`
-  - [ ] `from tg_core.infra.limiter import safe_call` присутствует
+  - [ ] `from tganalytics.infra.limiter import safe_call` присутствует
   
 - [ ] **🧪 Тесты**
   - [ ] Новые функции имеют тесты
@@ -211,7 +211,7 @@ make telegram-api-audit
 
 3. **Добавить import если нужно:**
    ```python
-   from tg_core.infra.limiter import safe_call, smart_pause
+   from tganalytics.infra.limiter import safe_call, smart_pause
    # или для group_manager.py
    # использовать уже существующий _safe_api_call
    ```

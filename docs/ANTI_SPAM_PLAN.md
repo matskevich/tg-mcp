@@ -185,7 +185,7 @@ async def check_account_hygiene(client):
 
 ### Обновление tele_client.py:
 ```python
-from tg_core.infra.limiter import safe_call, rate_limiter
+from tganalytics.infra.limiter import safe_call, rate_limiter
 
 async def test_connection():
     """Тестирует подключение к Telegram API с rate limiting"""
@@ -206,7 +206,7 @@ async def test_connection():
 
 ### Обновление group_manager.py:
 ```python
-from tg_core.infra.limiter import safe_call, smart_pause
+from tganalytics.infra.limiter import safe_call, smart_pause
 
 async def get_participants(self, group_identifier: str, limit: int = 100):
     """Получает список участников с rate limiting"""

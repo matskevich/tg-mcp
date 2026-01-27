@@ -1,0 +1,15 @@
+[project]
+name = "tganalytics"
+version = "0.1.0"
+description = "Telegram Analytics - infrastructure for Telegram data collection, rate limiting, anti-spam, and analytics"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "TG Analytics", email = "dev@example.com" }]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["tganalytics", "tganalytics.infra", "tganalytics.domain", "tganalytics.config"]

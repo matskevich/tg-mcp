@@ -1,0 +1,17 @@
+# Windsurf rules
+
+См. AGENTS.md в корне репо для полного контекста.
+
+## Проекты
+
+- gconf: `gconf/CONTEXT.md` — образовательный проект по AI
+- vahue: `vahue/satia/README.md` — ретриты/практики
+
+## Правила
+
+1. Проекты gconf и vahue — разные домены
+2. Telegram через `packages/tg_core` (не напрямую telethon)
+3. PII не коммитить
+4. Blacklist при метриках
+
+Детали: `.cursor/rules/`

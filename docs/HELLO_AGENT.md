@@ -1,7 +1,7 @@
 # HELLO AGENT — контекст и рамки
 
 ## Что это
-Живая экосистема вокруг ОДНОЙ Telegram-сессии. Есть несколько приложений (apps) — сейчас S16-Leads, далее GConf и др. Все ОБЩЕЕ — в ядре (core): антиспам/лимитер, логгер, доступ к Telegram, конфиг, метрики. Любой app использует только публичный API core. Если app вырастает — его можно вынести отдельно, оставляя зависимость от core.
+Живая экосистема вокруг Telegram (с безопасными вызовами и лимитером). Есть несколько проектов (папки в корне) — например `gconf/`, `vahue/` — и legacy-`apps/*` для старых сценариев. Всё ОБЩЕЕ — в ядре (core): антиспам/лимитер, логгер, доступ к Telegram, конфиг, метрики. Любой проект использует только публичный API core.
 
 ## Как есть (as-is, кратко)
 - `src/infra/` — `tele_client.py`, `limiter.py` (safe_call, 4 RPS)
@@ -14,8 +14,9 @@
   - `tg_core/infra/{tele_client.py, limiter.py, logging.py, monitors.py?}`
   - `tg_core/domain/groups.py` (интерфейс + реализация)
   - `tg_core/config/loader.py` (dotenv+pydantic), `tg_core/typing.py`
-- `apps/s16-leads` — тонкое приложение (CLI/сценарии), использует `core.*`
-- `apps/gconf` — аналитика/отчёты (когда появится)
+- `apps/s16-leads` — тонкое приложение (CLI/сценарии), использует `core.*` (legacy)
+- `gconf/` — проект gconf: docs + CLI/tools/pipelines + exports
+- `vahue/` — проект vahue: docs + аналитика/скрипты/экспорты
 - `tests/core/*` — базовые тесты для перенесённых модулей
 
 ## Инварианты (НЕ обсуждаются)

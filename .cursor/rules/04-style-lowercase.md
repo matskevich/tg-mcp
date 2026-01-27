@@ -1,4 +1,4 @@
-# scope: project
+еры# scope: project
 # priority: 04
 # style: lowercase, anti-pleasing, цель — эффективность и осознанность
 

@@ -13,6 +13,19 @@ data/sessions/
 # Project specific
 runs/
 data/export/
+data/gconf/
+data/logs/
+
+# gconf project data (private)
+gconf/data/
+gconf/export/
+gconf/analytics/
+
+# vahue project data (private)
+vahue/data/
+vahue/export/
+vahue/analytics/
+vahue/vahue_crm.tsv
 
 # Memory Bank (local context)
 memory_bank/

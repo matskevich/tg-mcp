@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 from datetime import datetime
-from tg_core.domain.groups import GroupManager
+from tganalytics.domain.groups import GroupManager
 
 
 @pytest.fixture

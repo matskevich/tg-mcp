@@ -21,7 +21,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from telethon.errors import FloodWaitError
 
 # Импортируем наши модули
-from tg_core.infra.limiter import (
+from tganalytics.infra.limiter import (
     TokenBucket, 
     RateLimiter, 
     safe_call, 

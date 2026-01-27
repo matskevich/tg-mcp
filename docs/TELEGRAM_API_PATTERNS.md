@@ -23,7 +23,7 @@ async def get_group_info(self, group_id: str):
         return None
 
 # ✅ ПРАВИЛЬНО: Используйте safe_call в других модулях  
-from tg_core.infra.limiter import safe_call
+from tganalytics.infra.limiter import safe_call
 
 async def get_user_info(client, user_id):
     return await safe_call(
@@ -113,7 +113,7 @@ class S16Config:
 
 ```python
 # s16_crosscheck.py - Приложения используют Core слой
-from tg_core.domain.groups import GroupManager
+from tganalytics.domain.groups import GroupManager
 
 async def crosscheck():
     manager = GroupManager(client)
@@ -188,8 +188,8 @@ async def bulk_telegram_operation(self, items: List[str]) -> List[Dict]:
 ### **Template 3: New Manager Class**
 
 ```python
-from tg_core.infra.limiter import safe_call, smart_pause
-from tg_core.infra.tele_client import TelegramClient
+from tganalytics.infra.limiter import safe_call, smart_pause
+from tganalytics.infra.tele_client import TelegramClient
 
 class NewManager:
     """Менеджер для новой функциональности Telegram"""
@@ -222,7 +222,7 @@ class NewManager:
 ```python
 import pytest
 from unittest.mock import AsyncMock, MagicMock
-from tg_core.domain.your_manager import YourManager
+from tganalytics.domain.your_manager import YourManager
 
 @pytest.mark.asyncio
 async def test_your_function_success():

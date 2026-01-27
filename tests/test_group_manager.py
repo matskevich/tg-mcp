@@ -5,7 +5,7 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 from telethon.errors import ChatAdminRequiredError, FloodWaitError
-from tg_core.domain.groups import GroupManager
+from tganalytics.domain.groups import GroupManager
 from telethon.tl.types import User
 
 @pytest.mark.asyncio
