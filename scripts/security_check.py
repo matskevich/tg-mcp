@@ -72,18 +72,14 @@ def main():
     # Проверка подключения к Telegram
     print("\n3. Проверка подключения к Telegram:")
     try:
-        result = subprocess.run(
-            [sys.executable, 'src/infra/tele_client.py'],
-            capture_output=True,
-            text=True,
-            timeout=30
-        )
-        if result.returncode == 0:
+        import asyncio
+        from tg_core.infra.tele_client import test_connection
+
+        success = asyncio.run(test_connection())
+        if success:
             print("   ✅ Подключение к Telegram успешно")
         else:
-            print(f"   ❌ Ошибка подключения: {result.stderr}")
-    except subprocess.TimeoutExpired:
-        print("   ⚠️  Таймаут подключения к Telegram")
+            print("   ❌ Подключение к Telegram не удалось (см. вывод выше)")
     except Exception as e:
         print(f"   ❌ Ошибка проверки: {e}")
     

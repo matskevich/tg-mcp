@@ -5,16 +5,16 @@
 import pytest
 import asyncio
 from unittest.mock import AsyncMock, patch, MagicMock
-from src.cli import main, handle_info, handle_participants, handle_search, handle_export
+from apps.s16leads.cli import main, handle_info, handle_participants, handle_search, handle_export
 
 @pytest.mark.asyncio
 async def test_cli_info_command(mock_telegram_client, mock_channel):
     """Тест команды info в CLI"""
-    with patch('src.cli.get_client') as mock_get_client:
+    with patch('apps.s16leads.cli.get_client') as mock_get_client:
         mock_get_client.return_value = mock_telegram_client
         
         # Мокаем GroupManager
-        with patch('src.cli.GroupManager') as mock_group_manager_class:
+        with patch('apps.s16leads.cli.GroupManager') as mock_group_manager_class:
             mock_group_manager = AsyncMock()
             mock_group_manager_class.return_value = mock_group_manager
             mock_group_manager.get_group_info.return_value = {
@@ -34,10 +34,10 @@ async def test_cli_info_command(mock_telegram_client, mock_channel):
 @pytest.mark.asyncio
 async def test_cli_participants_command_json(mock_telegram_client, sample_participants):
     """Тест команды participants с JSON форматом"""
-    with patch('src.cli.get_client') as mock_get_client:
+    with patch('apps.s16leads.cli.get_client') as mock_get_client:
         mock_get_client.return_value = mock_telegram_client
         
-        with patch('src.cli.GroupManager') as mock_group_manager_class:
+        with patch('apps.s16leads.cli.GroupManager') as mock_group_manager_class:
             mock_group_manager = AsyncMock()
             mock_group_manager_class.return_value = mock_group_manager
             mock_group_manager.get_participants.return_value = sample_participants
@@ -51,10 +51,10 @@ async def test_cli_participants_command_json(mock_telegram_client, sample_partic
 @pytest.mark.asyncio
 async def test_cli_participants_command_text(mock_telegram_client, sample_participants):
     """Тест команды participants с текстовым форматом"""
-    with patch('src.cli.get_client') as mock_get_client:
+    with patch('apps.s16leads.cli.get_client') as mock_get_client:
         mock_get_client.return_value = mock_telegram_client
         
-        with patch('src.cli.GroupManager') as mock_group_manager_class:
+        with patch('apps.s16leads.cli.GroupManager') as mock_group_manager_class:
             mock_group_manager = AsyncMock()
             mock_group_manager_class.return_value = mock_group_manager
             mock_group_manager.get_participants.return_value = sample_participants
@@ -68,10 +68,10 @@ async def test_cli_participants_command_text(mock_telegram_client, sample_partic
 @pytest.mark.asyncio
 async def test_cli_search_command(mock_telegram_client, sample_participants):
     """Тест команды search"""
-    with patch('src.cli.get_client') as mock_get_client:
+    with patch('apps.s16leads.cli.get_client') as mock_get_client:
         mock_get_client.return_value = mock_telegram_client
         
-        with patch('src.cli.GroupManager') as mock_group_manager_class:
+        with patch('apps.s16leads.cli.GroupManager') as mock_group_manager_class:
             mock_group_manager = AsyncMock()
             mock_group_manager_class.return_value = mock_group_manager
             mock_group_manager.search_participants.return_value = sample_participants
@@ -85,10 +85,10 @@ async def test_cli_search_command(mock_telegram_client, sample_participants):
 @pytest.mark.asyncio
 async def test_cli_export_command_json(mock_telegram_client, sample_participants, tmp_path):
     """Тест команды export с JSON форматом"""
-    with patch('src.cli.get_client') as mock_get_client:
+    with patch('apps.s16leads.cli.get_client') as mock_get_client:
         mock_get_client.return_value = mock_telegram_client
         
-        with patch('src.cli.GroupManager') as mock_group_manager_class:
+        with patch('apps.s16leads.cli.GroupManager') as mock_group_manager_class:
             mock_group_manager = AsyncMock()
             mock_group_manager_class.return_value = mock_group_manager
             mock_group_manager.get_participants.return_value = sample_participants
@@ -108,10 +108,10 @@ async def test_cli_export_command_json(mock_telegram_client, sample_participants
 @pytest.mark.asyncio
 async def test_cli_export_command_csv(mock_telegram_client, sample_participants, tmp_path):
     """Тест команды export с CSV форматом"""
-    with patch('src.cli.get_client') as mock_get_client:
+    with patch('apps.s16leads.cli.get_client') as mock_get_client:
         mock_get_client.return_value = mock_telegram_client
         
-        with patch('src.cli.GroupManager') as mock_group_manager_class:
+        with patch('apps.s16leads.cli.GroupManager') as mock_group_manager_class:
             mock_group_manager = AsyncMock()
             mock_group_manager_class.return_value = mock_group_manager
             mock_group_manager.export_participants_to_csv.return_value = True
@@ -128,7 +128,7 @@ async def test_cli_export_command_csv(mock_telegram_client, sample_participants,
 @pytest.mark.asyncio
 async def test_cli_main_function():
     """Тест основной функции main"""
-    with patch('src.cli.argparse.ArgumentParser') as mock_parser_class:
+    with patch('apps.s16leads.cli.argparse.ArgumentParser') as mock_parser_class:
         mock_parser = MagicMock()
         mock_parser_class.return_value = mock_parser
         
@@ -142,11 +142,11 @@ async def test_cli_main_function():
         mock_args.format = 'json'
         mock_parser.parse_args.return_value = mock_args
         
-        with patch('src.cli.get_client') as mock_get_client:
+        with patch('apps.s16leads.cli.get_client') as mock_get_client:
             mock_client = AsyncMock()
             mock_get_client.return_value = mock_client
             
-            with patch('src.cli.GroupManager') as mock_group_manager_class:
+            with patch('apps.s16leads.cli.GroupManager') as mock_group_manager_class:
                 mock_group_manager = AsyncMock()
                 mock_group_manager_class.return_value = mock_group_manager
                 
@@ -161,7 +161,7 @@ async def test_cli_main_function():
 @pytest.mark.asyncio
 async def test_cli_main_function_with_search():
     """Тест основной функции main с командой search"""
-    with patch('src.cli.argparse.ArgumentParser') as mock_parser_class:
+    with patch('apps.s16leads.cli.argparse.ArgumentParser') as mock_parser_class:
         mock_parser = MagicMock()
         mock_parser_class.return_value = mock_parser
         
@@ -175,11 +175,11 @@ async def test_cli_main_function_with_search():
         mock_args.format = 'json'
         mock_parser.parse_args.return_value = mock_args
         
-        with patch('src.cli.get_client') as mock_get_client:
+        with patch('apps.s16leads.cli.get_client') as mock_get_client:
             mock_client = AsyncMock()
             mock_get_client.return_value = mock_client
             
-            with patch('src.cli.GroupManager') as mock_group_manager_class:
+            with patch('apps.s16leads.cli.GroupManager') as mock_group_manager_class:
                 mock_group_manager = AsyncMock()
                 mock_group_manager_class.return_value = mock_group_manager
                 # Возвращаем реальные данные вместо моков для JSON сериализации
@@ -207,7 +207,7 @@ async def test_cli_main_function_with_search():
 @pytest.mark.asyncio
 async def test_cli_main_function_with_export():
     """Тест основной функции main с командой export"""
-    with patch('src.cli.argparse.ArgumentParser') as mock_parser_class:
+    with patch('apps.s16leads.cli.argparse.ArgumentParser') as mock_parser_class:
         mock_parser = MagicMock()
         mock_parser_class.return_value = mock_parser
         
@@ -221,11 +221,11 @@ async def test_cli_main_function_with_export():
         mock_args.format = 'json'
         mock_parser.parse_args.return_value = mock_args
         
-        with patch('src.cli.get_client') as mock_get_client:
+        with patch('apps.s16leads.cli.get_client') as mock_get_client:
             mock_client = AsyncMock()
             mock_get_client.return_value = mock_client
             
-            with patch('src.cli.GroupManager') as mock_group_manager_class:
+            with patch('apps.s16leads.cli.GroupManager') as mock_group_manager_class:
                 mock_group_manager = AsyncMock()
                 mock_group_manager_class.return_value = mock_group_manager
                 # Возвращаем реальные данные вместо моков для JSON сериализации

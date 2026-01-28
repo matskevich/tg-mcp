@@ -10,12 +10,10 @@ venv/
 *.session
 data/sessions/
 
-# Project specific
-runs/
+# Runtime data
 data/export/
-
-# Memory Bank (local context)
-memory_bank/
+data/logs/
+data/anti_spam/
 
 # Python cache
 __pycache__/
@@ -40,9 +38,3 @@ logs/
 # Temporary files
 tmp/
 temp/
-
-# Participant data files (contain personal information)
-s16_*_participants.json
-*_participants.json
-data/anti_spam/
-data/anti_spam/daily_counters.txt

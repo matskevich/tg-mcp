@@ -1,171 +1,88 @@
-# S16-Leads
+# tg-mcp
 
-Telegram-клиент для работы с лидами на базе Telethon с встроенной S16 конфигурацией и системой сверки участников.
+MCP server + Python library for Telegram API with built-in rate limiting, anti-spam protection, and session management.
 
-## ✨ Новые возможности
+## What is this?
 
-### 🎯 **S16 Configuration System**
-Специальная система для работы с экосистемой S16:
-- **Референсная группа**: s16 space (автоконфигурация)
-- **Сверка участников** между S16 группами  
-- **Анализ пересечений** и поиск новых лидов
-- **Production-ready**: протестировано на 259+ участниках
+**tg-mcp** provides:
+- **MCP server** — 9 tools for accessing Telegram API from Claude Code
+- **Rate limiting** — Token bucket (4 RPS), daily quotas (20 DM/day, 20 joins/day)
+- **Anti-spam** — FLOOD_WAIT retry with exponential backoff
+- **Session security** — chmod 700/600 hardening for session files
+- **Data exporters** — participants, messages, groups, dialogs
+
+## Quick Start
 
 ```bash
-# Сверка участников S16 групп
-PYTHONPATH=. python3 examples/s16_crosscheck.py -1002540509234 \
-  --name "S16 Coliving DOMA" --output results.json
-
-# Результат: 61.9% overlap, 38.1% new leads 
-```
-
-## 🚀 Быстрый старт
-
-1. **Клонируйте репозиторий:**
-```bash
-git clone <repository-url>
-cd s16-leads
-```
-
-2. **Создайте виртуальное окружение:**
-```bash
+# Install dependencies
 python3 -m venv venv
-source venv/bin/activate  # Linux/Mac
-# или
-venv\Scripts\activate     # Windows
-```
-
-3. **Установите зависимости:**
-```bash
+source venv/bin/activate
 pip install -r requirements.txt
-```
 
-4. **Настройте конфигурацию:**
-```bash
+# Configure
 cp .env.sample .env
-# Отредактируйте .env файл, добавив ваши API ключи
+# Edit .env with your TG_API_ID, TG_API_HASH
+
+# Run tests
+PYTHONPATH=tganalytics:. python3 -m pytest tests/ -q
 ```
 
-5. **Протестируйте подключение:**
-```bash
-python3 src/infra/tele_client.py
+## MCP Server
+
+Add to your project's `.mcp.json`:
+```json
+{
+  "mcpServers": {
+    "telegram": {
+      "command": "path/to/tg-mcp/venv/bin/python3",
+      "args": ["path/to/tg-mcp/tganalytics/mcp_server.py"],
+      "env": {
+        "PYTHONPATH": "path/to/tg-mcp/tganalytics:path/to/tg-mcp",
+        "TG_SESSIONS_DIR": "path/to/tg-mcp/data/sessions"
+      }
+    }
+  }
+}
 ```
 
-## 🔐 Безопасность
+### Available Tools
 
-**ВАЖНО:** Проект содержит конфиденциальные данные. Ознакомьтесь с [документацией по безопасности](docs/SECURITY.md).
+| Tool | Description |
+|------|-------------|
+| `tg_list_sessions` | List available Telegram sessions |
+| `tg_use_session` | Switch active session |
+| `tg_get_group_info` | Get group/channel info |
+| `tg_get_participants` | Export group members |
+| `tg_search_participants` | Search members by query |
+| `tg_get_messages` | Export messages |
+| `tg_get_message_count` | Get message count |
+| `tg_get_group_creation_date` | Get group creation date |
+| `tg_get_stats` | Anti-spam system stats |
 
-### Ключевые моменты:
-- ✅ API ключи хранятся в `.env` (не коммитится)
-- ✅ Сессионные файлы в `data/sessions/` (защищено)
-- ✅ Правильные права доступа на файлы
-- ✅ Обработка ошибок аутентификации
-
-## 📁 Структура проекта
+## Structure
 
 ```
-s16-leads/
-├── src/
-│   ├── infra/
-│   │   └── tele_client.py    # Telegram клиент
-│   └── cli.py                # CLI интерфейс
-├── data/sessions/            # Сессионные файлы
-├── docs/
-│   └── SECURITY.md           # Документация по безопасности
-├── .env                      # Конфигурация (не коммитится)
-├── .env.sample               # Шаблон конфигурации
-└── requirements.txt          # Зависимости
+tganalytics/
+├── tganalytics/        # Core package
+│   ├── infra/          # Clients, rate limiting, metrics
+│   ├── domain/         # GroupManager, participants
+│   └── config/         # Configuration
+├── mcp_server.py       # MCP server entry point
+└── examples/           # Usage examples
 ```
 
-## 🔧 CLI Команды
+## Architecture
 
-### Основные команды:
-```bash
-# Информация о группе
-PYTHONPATH=. python3 src/cli.py info -1002188344480
+All Telegram API calls go through a 5-layer protection chain:
 
-# Получение участников
-PYTHONPATH=. python3 src/cli.py participants -1002540509234 --limit 100
-
-# Поиск участников
-PYTHONPATH=. python3 src/cli.py search -1002540509234 --query "Dmitry"
-
-# Экспорт участников
-PYTHONPATH=. python3 src/cli.py export -1002540509234 --output data/export/members.json
-
-# Дата создания группы (новая функция!)
-PYTHONPATH=. python3 src/cli.py creation-date -1002188344480
+```
+_safe_api_call → safe_call → TokenBucket → Telegram API
+                    ↓            ↓              ↓
+              DM/join quotas   4 RPS    FLOOD_WAIT retry + backoff
 ```
 
-### S16 специальные команды:
-```bash
-# Сверка участников с s16 space
-PYTHONPATH=. python3 examples/s16_crosscheck.py -1002540509234 \
-  --name "S16 Coliving DOMA" --output data/export/crosscheck.json
+See [docs/ANTISPAM_SECURITY.md](docs/ANTISPAM_SECURITY.md) for details.
 
-# Тестирование S16 конфигурации
-PYTHONPATH=. python3 examples/test_s16_config.py
+## License
 
-# Просмотр всех ваших чатов
-PYTHONPATH=. python3 examples/list_my_chats.py
-```
-
-## 🛠️ Разработка
-
-### Проверка безопасности:
-```bash
-# Проверка подключения
-python3 src/infra/tele_client.py
-
-# Проверка прав доступа
-ls -la data/sessions/
-
-# Проверка .gitignore
-git status --ignored
-```
-
-## 🚚 Передача проекта
-
-### Автоматическая подготовка к передаче
-
-Для безопасной передачи проекта другому разработчику используйте специальный скрипт:
-
-```bash
-# Запустите скрипт подготовки
-python3 scripts/prepare_for_transfer.py
-```
-
-Скрипт автоматически:
-- 🔍 Найдет все конфиденциальные файлы
-- 📁 Создаст чистую копию проекта  
-- 🗜️ Создаст ZIP архив
-- 📝 Добавит скрипт быстрой настройки
-- 🛡️ Исключит все API ключи и сессии
-
-### Что получит ваш друг:
-
-1. **Полный проект** без конфиденциальных данных
-2. **Подробное руководство** в `docs/TRANSFER_GUIDE.md`
-3. **Скрипт быстрой настройки** `setup.sh`
-4. **Примеры использования** в папке `examples/`
-
-### Безопасная передача:
-
-```bash
-# 1. Подготовка проекта
-python3 scripts/prepare_for_transfer.py
-
-# 2. Отправка архива другу
-# Отправьте созданный ZIP файл любым способом
-
-# 3. Инструкции для друга
-# Пусть читает docs/TRANSFER_GUIDE.md
-```
-
-### Полная документация по передаче:
-
-📚 **[Подробное руководство по передаче](docs/TRANSFER_GUIDE.md)** - полная инструкция для вашего друга
-
-## 📝 Лицензия
-
-MIT License
+MIT

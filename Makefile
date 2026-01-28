@@ -47,6 +47,8 @@ install:
 setup-dirs:
 	@echo "📁 Creating directories..."
 	mkdir -p data/sessions data/export data/anti_spam data/logs
+	mkdir -p gconf/data/sessions gconf/export
+	mkdir -p vahue/data/sessions vahue/export
 	chmod 700 data/sessions
 	@echo "✅ Directories created"
 
@@ -90,7 +92,7 @@ dev-setup: sync-env setup-dirs install
 # Check anti-spam status
 check-anti-spam:
 	@echo "🛡️  Checking anti-spam system status..."
-	@python -c "from src.infra.limiter import get_rate_limiter; limiter = get_rate_limiter(); print('📊 Stats:', limiter.get_stats())" 2>/dev/null || echo "❌ Anti-spam system not initialized"
+	@python -c "from tganalytics.infra.limiter import get_rate_limiter; limiter = get_rate_limiter(); print('📊 Stats:', limiter.get_stats())" 2>/dev/null || echo "❌ Anti-spam system not initialized"
 
 # Show current .env status
 env-status: check-env check-anti-spam
@@ -98,15 +100,15 @@ env-status: check-env check-anti-spam
 # CLI shortcuts (require GROUP_ID variable)
 info:
 	@if [ -z "$(GROUP_ID)" ]; then echo "❌ Usage: make info GROUP_ID=-1001234567890"; exit 1; fi
-	PYTHONPATH=. python src/cli.py info $(GROUP_ID)
+	PYTHONPATH=. python -c "from apps.s16leads.cli import asyncio, main; asyncio.run(main())" info $(GROUP_ID)
 
 participants:
 	@if [ -z "$(GROUP_ID)" ]; then echo "❌ Usage: make participants GROUP_ID=-1001234567890 LIMIT=100"; exit 1; fi
-	PYTHONPATH=. python src/cli.py participants $(GROUP_ID) --limit $(or $(LIMIT),100)
+	PYTHONPATH=. python -c "from apps.s16leads.cli import asyncio, main; asyncio.run(main())" participants $(GROUP_ID) --limit $(or $(LIMIT),100)
 
 export:
 	@if [ -z "$(GROUP_ID)" ]; then echo "❌ Usage: make export GROUP_ID=-1001234567890 OUTPUT=data/export/members.json"; exit 1; fi
-	PYTHONPATH=. python src/cli.py export $(GROUP_ID) --output $(or $(OUTPUT),data/export/members.json) --format $(or $(FORMAT),json)
+	PYTHONPATH=. python -c "from apps.s16leads.cli import asyncio, main; asyncio.run(main())" export $(GROUP_ID) --output $(or $(OUTPUT),data/export/members.json) --format $(or $(FORMAT),json)
 
 # =====================================================
 # ANTI-SPAM COMPLIANCE AND SECURITY CHECKS
@@ -186,7 +188,7 @@ telegram-api-audit:
 	python scripts/check_anti_spam_compliance.py
 	@echo ""
 	@echo "=== 4. Checking rate limiter usage ==="
-	@python -c "from src.infra.limiter import get_rate_limiter; limiter = get_rate_limiter(); stats = limiter.get_stats(); print('📊 Rate Limiter Stats:'); [print(f'   {k}: {v}') for k, v in stats.items()]" 2>/dev/null || echo "❌ Rate limiter not accessible"
+	@python -c "from tganalytics.infra.limiter import get_rate_limiter; limiter = get_rate_limiter(); stats = limiter.get_stats(); print('📊 Rate Limiter Stats:'); [print(f'   {k}: {v}') for k, v in stats.items()]" 2>/dev/null || echo "❌ Rate limiter not accessible"
 
 # Quick development checks (before commit)
 dev-check: format lint anti-spam-check

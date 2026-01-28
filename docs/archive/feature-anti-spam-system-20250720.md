@@ -137,7 +137,7 @@ ANTI_SPAM_SMART_PAUSE_DURATION=5.0    # Pause duration
 ### Usage Examples
 ```python
 # Automatic protection for any Telegram API call
-from src.infra.limiter import safe_call
+from tganalytics.infra.limiter import safe_call
 
 # Protected API call with automatic retry
 result = await safe_call(client.get_entity, "username")

@@ -5,8 +5,8 @@
 
 import asyncio
 import json
-from src.infra.tele_client import get_client
-from src.core.group_manager import GroupManager
+from tganalytics.infra.tele_client import get_client
+from tganalytics.domain.groups import GroupManager
 
 async def test_group_functions():
     """Тестирует основные функции работы с группами"""

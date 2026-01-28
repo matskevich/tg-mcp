@@ -2,11 +2,19 @@
 Конфигурация pytest для тестов S16-Leads
 """
 
+import sys
+from pathlib import Path
 import pytest
 import asyncio
 from unittest.mock import AsyncMock, MagicMock
 from telethon import TelegramClient
 from telethon.tl.types import User, Channel, Chat
+
+# Make local `tg_core` importable in tests without sys.path hacks in app code.
+REPO_ROOT = Path(__file__).resolve().parents[1]
+TG_CORE_PKG = REPO_ROOT / "packages" / "tg_core"
+if str(TG_CORE_PKG) not in sys.path:
+    sys.path.insert(0, str(TG_CORE_PKG))
 
 class AsyncIteratorMock:
     """Мок для асинхронного итератора"""

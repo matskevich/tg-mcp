@@ -24,6 +24,8 @@ from pathlib import Path
 # Настройка логирования с тегом SAFE
 logger = logging.getLogger(__name__)
 
+from .metrics import increment_rate_limit_throttled_total  # added for observability
+
 class TokenBucket:
     """
     Token Bucket алгоритм для rate limiting
@@ -72,6 +74,12 @@ class TokenBucket:
                 # Вычисляем время ожидания
                 tokens_to_wait = tokens_needed - self.tokens
                 wait_time = tokens_to_wait / self.refill_rate
+                
+                # observability: record throttling event
+                try:
+                    increment_rate_limit_throttled_total()
+                except Exception:
+                    pass
                 
                 logger.info(f"[SAFE] Rate limit: waiting {wait_time:.2f}s for {tokens_needed} tokens")
                 await asyncio.sleep(wait_time)

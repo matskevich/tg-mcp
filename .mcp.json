@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "tganalytics": {
+      "command": "venv/bin/python3",
+      "args": ["tganalytics/mcp_server.py"],
+      "env": {
+        "PYTHONPATH": "tganalytics:.",
+        "TG_SESSIONS_DIR": "data/sessions",
+        "TG_SESSION_PATH": "data/sessions/gconf_support.session"
+      }
+    }
+  }
+}
