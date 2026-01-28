@@ -407,11 +407,46 @@ class GroupManager:
                     if not msg.message and not msg.media:
                         continue
                     
+                    # Extract fwd_from info
+                    fwd_from = None
+                    if msg.fwd_from:
+                        fwd = msg.fwd_from
+                        fwd_from = {
+                            'from_id': None,
+                            'from_type': None,
+                            'from_name': fwd.from_name,
+                            'from_username': None,
+                            'from_first_name': None,
+                            'from_last_name': None,
+                            'date': fwd.date.isoformat() if fwd.date else None,
+                            'channel_post': fwd.channel_post,
+                        }
+                        if fwd.from_id:
+                            from telethon.tl.types import PeerUser, PeerChannel, PeerChat
+                            if isinstance(fwd.from_id, PeerUser):
+                                fwd_from['from_id'] = fwd.from_id.user_id
+                                fwd_from['from_type'] = 'user'
+                            elif isinstance(fwd.from_id, PeerChannel):
+                                fwd_from['from_id'] = fwd.from_id.channel_id
+                                fwd_from['from_type'] = 'channel'
+                            elif isinstance(fwd.from_id, PeerChat):
+                                fwd_from['from_id'] = fwd.from_id.chat_id
+                                fwd_from['from_type'] = 'chat'
+                        # Resolve name/username from cached entities (no extra API calls)
+                        # msg.forward.sender/.chat are populated from the iter_messages response
+                        if msg.forward:
+                            fwd_entity = msg.forward.sender or msg.forward.chat
+                            if fwd_entity:
+                                fwd_from['from_username'] = getattr(fwd_entity, 'username', None)
+                                fwd_from['from_first_name'] = getattr(fwd_entity, 'first_name', None)
+                                fwd_from['from_last_name'] = getattr(fwd_entity, 'last_name', None)
+
                     message_data = {
                         'id': msg.id,
                         'date': msg.date.isoformat() if msg.date else None,
                         'from_id': msg.from_id.user_id if msg.from_id else None,
                         'text': msg.message or '',
+                        'fwd_from': fwd_from,
                         'is_reply': msg.reply_to is not None,
                         'reply_to_msg_id': msg.reply_to.reply_to_msg_id if msg.reply_to else None,
                         'views': getattr(msg, 'views', None),
@@ -444,6 +479,152 @@ class GroupManager:
             logger.error(f"Ошибка при получении сообщений группы {group_identifier}: {e}")
             return []
     
+    async def get_my_dialogs(self, limit: int = 100, dialog_type: str = "all") -> List[Dict[str, Any]]:
+        """
+        Получает список диалогов (групп/каналов/личных чатов) текущего аккаунта.
+
+        Args:
+            limit: максимальное количество диалогов
+            dialog_type: фильтр по типу — "all", "group", "channel", "user"
+
+        Returns:
+            Список словарей с информацией о диалогах
+        """
+        try:
+            async def fetch_dialogs():
+                dialogs = []
+                async for dialog in self.client.iter_dialogs(limit=limit):
+                    dialogs.append(dialog)
+                return dialogs
+
+            dialogs = await _safe_api_call(fetch_dialogs)
+
+            results = []
+            for dialog in dialogs:
+                if dialog.is_user:
+                    dtype = "user"
+                elif dialog.is_group:
+                    dtype = "group"
+                elif dialog.is_channel:
+                    dtype = "channel"
+                else:
+                    dtype = "other"
+
+                if dialog_type != "all" and dtype != dialog_type:
+                    continue
+
+                results.append({
+                    "id": dialog.id,
+                    "title": dialog.title or dialog.name or "Untitled",
+                    "type": dtype,
+                    "username": getattr(dialog.entity, "username", None),
+                    "participants_count": getattr(dialog.entity, "participants_count", None),
+                    "unread_count": dialog.unread_count,
+                })
+
+            logger.info(f"Получено {len(results)} диалогов (фильтр: {dialog_type})")
+            return results
+
+        except FloodWaitError as e:
+            logger.error(f"Превышен лимит запросов при получении диалогов. Ожидание {e.seconds} секунд")
+            return []
+        except Exception as e:
+            logger.error(f"Ошибка при получении диалогов: {e}")
+            return []
+
+    async def resolve_username(self, username: str) -> Optional[Dict[str, Any]]:
+        """
+        Резолвит username в информацию о пользователе/канале/чате.
+
+        Args:
+            username: Telegram username (с или без @)
+
+        Returns:
+            Словарь с id, type, username, first_name, last_name и т.д., или None
+        """
+        try:
+            if not username.startswith('@'):
+                username = '@' + username
+
+            entity = await _safe_api_call(self.client.get_entity, username)
+
+            if isinstance(entity, User):
+                return {
+                    'id': entity.id,
+                    'type': 'user',
+                    'username': entity.username,
+                    'first_name': entity.first_name,
+                    'last_name': entity.last_name,
+                    'is_bot': entity.bot,
+                    'is_premium': getattr(entity, 'premium', False),
+                }
+            elif isinstance(entity, Channel):
+                return {
+                    'id': entity.id,
+                    'type': 'channel' if entity.broadcast else 'supergroup',
+                    'username': entity.username,
+                    'title': entity.title,
+                    'participants_count': getattr(entity, 'participants_count', None),
+                }
+            elif isinstance(entity, Chat):
+                return {
+                    'id': entity.id,
+                    'type': 'chat',
+                    'title': entity.title,
+                    'participants_count': getattr(entity, 'participants_count', None),
+                }
+            else:
+                return {
+                    'id': getattr(entity, 'id', None),
+                    'type': type(entity).__name__,
+                }
+
+        except Exception as e:
+            logger.error(f"Ошибка при resolve username {username}: {e}")
+            return None
+
+    async def download_media(self, group_identifier: Union[str, int], message_id: int, output_dir: str) -> Optional[str]:
+        """
+        Скачивает медиа/файл из сообщения в указанную директорию.
+
+        Args:
+            group_identifier: username группы (без @) или ID группы
+            message_id: ID сообщения с медиа
+            output_dir: директория для сохранения файла
+
+        Returns:
+            Путь к скачанному файлу или None при ошибке
+        """
+        try:
+            if isinstance(group_identifier, int):
+                entity_id = group_identifier
+            elif isinstance(group_identifier, str) and (group_identifier.startswith('-') and group_identifier[1:].isdigit()):
+                entity_id = int(group_identifier)
+            else:
+                if not group_identifier.startswith('@'):
+                    entity_id = '@' + group_identifier
+                else:
+                    entity_id = group_identifier
+
+            entity = await _safe_api_call(self.client.get_entity, entity_id)
+
+            async def do_download():
+                msgs = await self.client.get_messages(entity, ids=message_id)
+                if not msgs or not msgs.media:
+                    logger.error(f"Message {message_id} has no media")
+                    return None
+                os.makedirs(output_dir, exist_ok=True)
+                return await self.client.download_media(msgs.media, output_dir)
+
+            path = await _safe_api_call(do_download)
+            if path:
+                logger.info(f"Downloaded media from message {message_id} to {path}")
+            return path
+
+        except Exception as e:
+            logger.error(f"Error downloading media from message {message_id}: {e}")
+            return None
+
     async def send_message(self, group_identifier: Union[str, int], message_text: str) -> bool:
         """
         Отправляет сообщение в группу с антиспам защитой

@@ -71,10 +71,13 @@ def get_client_for_session(custom_session_file_path: str):
     session_dir.mkdir(parents=True, exist_ok=True)
     # Усиливаем права
     _harden_session_storage(session_dir, session_file)
-    key = str(session_file.resolve())
+    resolved = session_file.resolve()
+    key = str(resolved)
     client = _clients_by_path.get(key)
     if client is None:
-        client = TelegramClient(key, api_id, api_hash)
+        # Telethon appends .session automatically — strip it to avoid double extension
+        session_name = str(resolved.with_suffix("")) if resolved.suffix == ".session" else str(resolved)
+        client = TelegramClient(session_name, api_id, api_hash)
         _clients_by_path[key] = client
     return client
 

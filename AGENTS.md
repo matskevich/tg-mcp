@@ -72,6 +72,62 @@
 └── docs/                   # общие документы
 ```
 
+## MCP Server (tganalytics)
+
+Read-only MCP сервер для доступа к Telegram API из Claude Code.
+
+- **Код**: `tganalytics/mcp_server.py` (147 строк, 9 tools)
+- **Конфиг**: `.mcp.json` (stdio transport, venv/bin/python3)
+- **Python**: 3.12 через Homebrew (`/opt/homebrew/bin/python3.12`), venv пересоздан
+- **Дефолтная сессия**: `gconf_support`
+
+### Статус (2026-01-28)
+
+**Готово:**
+- `mcp_server.py` написан, все 9 tools зарегистрированы (проверено)
+- `.mcp.json` создан с правильными путями
+- `requirements.txt` обновлён (`mcp>=1.0.0`)
+- Python 3.12 установлен, venv пересоздан, все зависимости установлены
+- Импорты проверены — всё работает
+
+**Нужно сделать:**
+- Перезапустить Claude Code чтобы MCP сервер подхватился
+- Проверить `/mcp` — должен быть виден `tganalytics` с 9 tools
+- Протестировать `tg_list_sessions` → должен показать `[dmatskevich, gconf_support, s16_session]`
+- Протестировать `tg_use_session("dmatskevich")` → переключение сессии
+- Протестировать `tg_get_group_info` на реальной группе
+
+### Tools
+
+| Tool | Параметры | Назначение |
+|------|-----------|------------|
+| `tg_list_sessions` | — | Список сессий в `data/sessions/` |
+| `tg_use_session` | `session_name` | Переключить сессию |
+| `tg_get_group_info` | `group` | Инфо о группе |
+| `tg_get_participants` | `group, limit?=100` | Участники группы |
+| `tg_search_participants` | `group, query, limit?=50` | Поиск участников |
+| `tg_get_messages` | `group, limit?=100, min_id?=0` | Сообщения |
+| `tg_get_message_count` | `group` | Количество сообщений |
+| `tg_get_group_creation_date` | `group` | Дата создания группы |
+| `tg_get_stats` | — | Статистика anti-spam |
+
+### Использование из другого проекта
+
+```json
+{
+  "mcpServers": {
+    "tganalytics": {
+      "command": "/Users/dmitrymatskevich/tganalytics/venv/bin/python3",
+      "args": ["/Users/dmitrymatskevich/tganalytics/tganalytics/mcp_server.py"],
+      "env": {
+        "PYTHONPATH": "/Users/dmitrymatskevich/tganalytics/tganalytics:/Users/dmitrymatskevich/tganalytics",
+        "TG_SESSIONS_DIR": "/Users/dmitrymatskevich/tganalytics/data/sessions"
+      }
+    }
+  }
+}
+```
+
 ## Команды
 
 ```bash
@@ -83,4 +139,7 @@ PYTHONPATH=. python3 gconf/src/cli.py participants <group_id> --limit 100
 
 # тесты
 PYTHONPATH=. python3 -m pytest tests/ -q
+
+# MCP server (ручной запуск для отладки)
+PYTHONPATH=tganalytics:. venv/bin/python3 tganalytics/mcp_server.py
 ```
