@@ -10,25 +10,10 @@ venv/
 *.session
 data/sessions/
 
-# Project specific
-runs/
+# Runtime data
 data/export/
-data/gconf/
 data/logs/
-
-# gconf project data (private)
-gconf/data/
-gconf/export/
-gconf/analytics/
-
-# vahue project data (private)
-vahue/data/
-vahue/export/
-vahue/analytics/
-vahue/vahue_crm.tsv
-
-# Memory Bank (local context)
-memory_bank/
+data/anti_spam/
 
 # Python cache
 __pycache__/
@@ -53,10 +38,3 @@ logs/
 # Temporary files
 tmp/
 temp/
-
-# Participant data files (contain personal information)
-s16_*_participants.json
-*_participants.json
-data/anti_spam/
-data/anti_spam/daily_counters.txt
-data/tantra_project/

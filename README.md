@@ -1,92 +1,87 @@
-# TG Analytics
+# tg-mcp
 
-Telegram Analytics infrastructure for data collection, rate limiting, anti-spam, and analytics.
+MCP server + Python library for Telegram API with built-in rate limiting, anti-spam protection, and session management.
 
 ## What is this?
 
-**TG Analytics** is a Python library providing core infrastructure for working with Telegram:
+**tg-mcp** provides:
+- **MCP server** — 9 tools for accessing Telegram API from Claude Code
+- **Rate limiting** — Token bucket (4 RPS), daily quotas (20 DM/day, 20 joins/day)
+- **Anti-spam** — FLOOD_WAIT retry with exponential backoff
+- **Session security** — chmod 700/600 hardening for session files
+- **Data exporters** — participants, messages, groups, dialogs
 
-- **Telegram clients** with session management
-- **Rate limiting** and anti-spam protection
-- **Data exporters** (participants, messages, groups)
-- **Domain models** (GroupManager, participants, metrics)
-- **Examples** for common use cases
+## Quick Start
+
+```bash
+# Install dependencies
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+# Configure
+cp .env.sample .env
+# Edit .env with your TG_API_ID, TG_API_HASH
+
+# Run tests
+PYTHONPATH=tganalytics:. python3 -m pytest tests/ -q
+```
+
+## MCP Server
+
+Add to your project's `.mcp.json`:
+```json
+{
+  "mcpServers": {
+    "telegram": {
+      "command": "path/to/tg-mcp/venv/bin/python3",
+      "args": ["path/to/tg-mcp/tganalytics/mcp_server.py"],
+      "env": {
+        "PYTHONPATH": "path/to/tg-mcp/tganalytics:path/to/tg-mcp",
+        "TG_SESSIONS_DIR": "path/to/tg-mcp/data/sessions"
+      }
+    }
+  }
+}
+```
+
+### Available Tools
+
+| Tool | Description |
+|------|-------------|
+| `tg_list_sessions` | List available Telegram sessions |
+| `tg_use_session` | Switch active session |
+| `tg_get_group_info` | Get group/channel info |
+| `tg_get_participants` | Export group members |
+| `tg_search_participants` | Search members by query |
+| `tg_get_messages` | Export messages |
+| `tg_get_message_count` | Get message count |
+| `tg_get_group_creation_date` | Get group creation date |
+| `tg_get_stats` | Anti-spam system stats |
 
 ## Structure
 
 ```
 tganalytics/
-├── tganalytics/            # Core package
-│   ├── infra/              # Infrastructure (clients, rate limiting, metrics)
-│   ├── domain/             # Domain models (groups, participants)
-│   ├── config/             # Configuration
-│   └── __init__.py
-├── examples/               # Usage examples
-└── pyproject.toml
+├── tganalytics/        # Core package
+│   ├── infra/          # Clients, rate limiting, metrics
+│   ├── domain/         # GroupManager, participants
+│   └── config/         # Configuration
+├── mcp_server.py       # MCP server entry point
+└── examples/           # Usage examples
 ```
 
-## Projects using TG Analytics
+## Architecture
 
-This monorepo also contains projects that use TG Analytics:
+All Telegram API calls go through a 5-layer protection chain:
 
-- **gconf/** — Educational AI project (meta-skills, vibe coding)
-- **vahue/** — Retreats and practices project
-
-Each project has its own:
-- `CONTEXT.md` — Full project context
-- `CLAUDE.md` — Entry point for AI agents
-- `analytics/` — Telegram analytics workspace (gitignored)
-- `data/` — Private data (gitignored)
-
-## Installation
-
-### Option 1: Editable install (development)
-
-```bash
-pip install -e tganalytics/
+```
+_safe_api_call → safe_call → TokenBucket → Telegram API
+                    ↓            ↓              ↓
+              DM/join quotas   4 RPS    FLOOD_WAIT retry + backoff
 ```
 
-### Option 2: PYTHONPATH (quick start)
-
-```bash
-export PYTHONPATH=tganalytics:\$PYTHONPATH
-```
-
-## Usage
-
-```python
-from tganalytics.infra.tele_client import get_client_for_session
-from tganalytics.domain.groups import GroupManager
-
-# Get Telegram client
-client = get_client_for_session("my_session")
-
-# Export participants
-manager = GroupManager(client)
-participants = await manager.get_participants(group_id, limit=100)
-```
-
-See `tganalytics/examples/` for more examples.
-
-## Running tests
-
-```bash
-PYTHONPATH=tganalytics:. python3 -m pytest tests/ -v
-```
-
-## Documentation
-
-- [CLAUDE.md](CLAUDE.md) — Entry point for AI agents
-- [gconf/CONTEXT.md](gconf/CONTEXT.md) — gconf project context
-- [vahue/CONTEXT.md](vahue/CONTEXT.md) — vahue project context
-- `.cursor/rules/` — Cursor AI rules
-
-## Architecture principles
-
-1. **Projects are isolated**: gconf and vahue are separate domains
-2. **Telegram via tganalytics**: No direct telethon imports in project code
-3. **PII protection**: All exports in gitignored folders
-4. **Rate limiting**: Built-in anti-spam and flood protection
+See [docs/ANTISPAM_SECURITY.md](docs/ANTISPAM_SECURITY.md) for details.
 
 ## License
 
