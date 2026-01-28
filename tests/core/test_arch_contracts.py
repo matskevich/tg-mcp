@@ -3,7 +3,8 @@ import sys
 from pathlib import Path
 
 
-def test_tg_core_does_not_import_apps():
+def test_tganalytics_does_not_import_external_projects():
+    """Ensure tganalytics package doesn't pull in external project modules"""
     # make sure tganalytics is importable
     sys.path.append(str(Path(__file__).resolve().parents[2] / "tganalytics"))
 
@@ -18,59 +19,11 @@ def test_tg_core_does_not_import_apps():
         for m in newly_loaded
         if m.startswith(("apps.", "gconf.", "vahue."))
     ]
-    assert offenders == [], f"tganalytics import must not pull project modules: {offenders}"
+    assert offenders == [], f"tganalytics import must not pull external modules: {offenders}"
 
 
-def test_project_code_has_no_direct_telethon_imports():
-    repo = Path(__file__).resolve().parents[2]
-    project_dirs = [repo / "apps", repo / "gconf", repo / "vahue"]
-    offenders = []
-    for base in project_dirs:
-        if not base.exists():
-            continue
-        for path in base.rglob("*.py"):
-            text = path.read_text(encoding="utf-8")
-            if "import telethon" in text or "from telethon import" in text:
-                offenders.append(str(path))
-    assert offenders == [], f"project code must not import telethon directly: {offenders}"
-
-
-def test_apps_do_not_import_each_other():
-    apps_dir = Path(__file__).resolve().parents[2] / "apps"
-    offenders = []
-    for app_dir in [p for p in apps_dir.iterdir() if p.is_dir()]:
-        app_name = app_dir.name
-        for py in app_dir.rglob("*.py"):
-            text = py.read_text(encoding="utf-8")
-            # forbid imports like from apps.<other>.app ...
-            if "from apps." in text and f"from apps.{app_name}." not in text:
-                offenders.append(str(py))
-    assert offenders == [], f"cross-app imports are forbidden: {offenders}"
-
-def test_root_projects_do_not_import_each_other():
-    repo = Path(__file__).resolve().parents[2]
-    offenders = []
-
-    checks = [
-        ("gconf", {"apps.", "vahue."}),
-        ("vahue", {"apps.", "gconf."}),
-    ]
-
-    for project_name, forbidden_prefixes in checks:
-        base = repo / project_name
-        if not base.exists():
-            continue
-        for py in base.rglob("*.py"):
-            text = py.read_text(encoding="utf-8")
-            for pref in forbidden_prefixes:
-                if f"from {pref}" in text or f"import {pref}" in text:
-                    offenders.append(str(py))
-                    break
-
-    assert offenders == [], f"cross-project imports are forbidden: {offenders}"
-
-
-def test_no_sys_path_append_in_code():
+def test_no_sys_path_append_in_library_code():
+    """Ensure no sys.path hacks in library code (allowed in tests and scripts)"""
     repo = Path(__file__).resolve().parents[2]
     offenders = []
     for path in repo.rglob("*.py"):
@@ -82,6 +35,4 @@ def test_no_sys_path_append_in_code():
         text = path.read_text(encoding="utf-8")
         if "sys.path.append(" in text:
             offenders.append(rel_str)
-    assert offenders == [], f"sys.path hacks forbidden in code: {offenders}"
-
-
+    assert offenders == [], f"sys.path hacks forbidden in library code: {offenders}"

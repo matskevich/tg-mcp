@@ -1,5 +1,5 @@
 """
-Конфигурация pytest для тестов S16-Leads
+Pytest configuration for tg-mcp tests
 """
 
 import sys
@@ -10,11 +10,11 @@ from unittest.mock import AsyncMock, MagicMock
 from telethon import TelegramClient
 from telethon.tl.types import User, Channel, Chat
 
-# Make local `tg_core` importable in tests without sys.path hacks in app code.
+# Make tganalytics importable in tests
 REPO_ROOT = Path(__file__).resolve().parents[1]
-TG_CORE_PKG = REPO_ROOT / "packages" / "tg_core"
-if str(TG_CORE_PKG) not in sys.path:
-    sys.path.insert(0, str(TG_CORE_PKG))
+TGANALYTICS_PKG = REPO_ROOT / "tganalytics"
+if str(TGANALYTICS_PKG) not in sys.path:
+    sys.path.insert(0, str(TGANALYTICS_PKG))
 
 class AsyncIteratorMock:
     """Мок для асинхронного итератора"""

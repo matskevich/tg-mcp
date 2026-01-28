@@ -267,22 +267,24 @@ def get_rate_limiter() -> RateLimiter:
     return _rate_limiter
 
 
-async def safe_call(func: Callable, *args, max_retries: int = 3, operation_type: str = "api", **kwargs) -> Any:
+async def safe_call(func: Callable, *args, max_retries: int = 3, operation_type: str = "api", timeout: float = 30.0, **kwargs) -> Any:
     """
     Безопасный wrapper для Telegram API вызовов с rate limiting и retry
-    
+
     Args:
         func: Функция для вызова
         *args: Аргументы функции
         max_retries: Максимальное количество повторов
         operation_type: Тип операции ("api", "dm", "join") для квот
+        timeout: Таймаут на один вызов в секундах (default: 30s)
         **kwargs: Keyword аргументы функции
-    
+
     Returns:
         Результат вызова функции
-        
+
     Raises:
         FloodWaitError: Если превышены все попытки retry
+        asyncio.TimeoutError: Если вызов превысил timeout
         Exception: Другие ошибки от функции
     """
     limiter = get_rate_limiter()
@@ -304,9 +306,14 @@ async def safe_call(func: Callable, *args, max_retries: int = 3, operation_type:
             await limiter.bucket.acquire(1)
             await limiter.increment_api_counter()
             
-            # Выполняем функцию
-            logger.debug(f"[SAFE] Calling {func.__name__} (attempt {retry_count + 1}/{max_retries + 1})")
-            result = await func(*args, **kwargs)
+            # Выполняем функцию с timeout
+            func_name = getattr(func, '__name__', 'anonymous')
+            logger.debug(f"[SAFE] Calling {func_name} (attempt {retry_count + 1}/{max_retries + 1}, timeout={timeout}s)")
+            try:
+                result = await asyncio.wait_for(func(*args, **kwargs), timeout=timeout)
+            except asyncio.TimeoutError:
+                logger.error(f"[SAFE] Timeout ({timeout}s) calling {func_name}")
+                raise asyncio.TimeoutError(f"API call {func_name} timed out after {timeout}s")
             
             # Увеличиваем соответствующие счетчики при успехе
             if operation_type == "dm":

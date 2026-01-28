@@ -1,4 +1,4 @@
-# Pre-commit configuration for S16-leads project
+# Pre-commit configuration for tg-mcp
 # Run: pre-commit install to enable
 
 repos:

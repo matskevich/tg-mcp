@@ -14,6 +14,45 @@ from tganalytics.infra.limiter import safe_call, smart_pause
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
+def _validate_group_identifier(group_identifier: str) -> tuple[bool, str]:
+    """
+    Валидирует идентификатор группы.
+
+    Returns:
+        (is_valid, error_message)
+    """
+    if not group_identifier:
+        return False, "Group identifier is empty"
+
+    # Если это числовой ID — всегда валидно
+    if isinstance(group_identifier, int):
+        return True, ""
+
+    # Строковый числовой ID (например "-1001234567890")
+    if isinstance(group_identifier, str):
+        stripped = group_identifier.lstrip('-')
+        if stripped.isdigit():
+            return True, ""
+
+    # Username не может содержать пробелы
+    if ' ' in group_identifier:
+        return False, f"Invalid group identifier '{group_identifier}': contains spaces. Use numeric ID or valid username without spaces."
+
+    # Username должен быть 5-32 символа, только a-z, 0-9, _
+    clean_username = group_identifier.lstrip('@')
+    if len(clean_username) < 5:
+        return False, f"Invalid username '{group_identifier}': too short (min 5 characters)"
+    if len(clean_username) > 32:
+        return False, f"Invalid username '{group_identifier}': too long (max 32 characters)"
+
+    # Проверяем допустимые символы
+    import re
+    if not re.match(r'^[a-zA-Z][a-zA-Z0-9_]*$', clean_username):
+        return False, f"Invalid username '{group_identifier}': must start with letter and contain only a-z, 0-9, _"
+
+    return True, ""
+
 # Проверяем тестовое окружение
 def _is_testing_environment():
     """Определяет тестовое окружение"""
@@ -45,13 +84,19 @@ class GroupManager:
     async def get_group_info(self, group_identifier: str) -> Optional[Dict[str, Any]]:
         """
         Получает информацию о группе
-        
+
         Args:
             group_identifier: username группы (без @) или ID группы
-            
+
         Returns:
             Словарь с информацией о группе или None
         """
+        # Быстрая валидация перед API вызовом
+        is_valid, error_msg = _validate_group_identifier(group_identifier)
+        if not is_valid:
+            logger.error(f"Validation failed: {error_msg}")
+            return None
+
         try:
             # Проверяем тип идентификатора
             if isinstance(group_identifier, int):
@@ -105,16 +150,22 @@ class GroupManager:
     async def get_participants(self, group_identifier: str, limit: int = 100) -> List[Dict[str, Any]]:
         """
         Получает список участников группы
-        
+
         Args:
             group_identifier: username группы (без @) или ID группы
             limit: максимальное количество участников для получения
-            
+
         Returns:
             Список словарей с информацией об участниках
         """
+        # Быстрая валидация
+        is_valid, error_msg = _validate_group_identifier(group_identifier)
+        if not is_valid:
+            logger.error(f"Validation failed: {error_msg}")
+            return []
+
         participants = []
-        
+
         try:
             # Получаем информацию о группе
             group_info = await self.get_group_info(group_identifier)
@@ -181,17 +232,23 @@ class GroupManager:
     async def search_participants(self, group_identifier: str, query: str, limit: int = 50) -> List[Dict[str, Any]]:
         """
         Ищет участников в группе по запросу
-        
+
         Args:
             group_identifier: username группы (без @) или ID группы
             query: поисковый запрос
             limit: максимальное количество результатов
-            
+
         Returns:
             Список найденных участников
         """
+        # Быстрая валидация
+        is_valid, error_msg = _validate_group_identifier(group_identifier)
+        if not is_valid:
+            logger.error(f"Validation failed: {error_msg}")
+            return []
+
         participants = []
-        
+
         try:
             logger.info(f"Поиск участников в группе {group_identifier} по запросу: {query}")
             
@@ -280,16 +337,22 @@ class GroupManager:
     async def get_group_creation_date(self, group_identifier: Union[str, int]) -> Optional[datetime]:
         """
         Получает приблизительную дату создания группы через первое сообщение
-        
+
         Использует быстрый метод: iter_messages(reverse=True, limit=1)
         Всего 1 API вызов даже для групп с миллионами сообщений
-        
+
         Args:
             group_identifier: username группы (без @) или ID группы
-            
+
         Returns:
             datetime объект с датой создания или None при ошибке
         """
+        # Быстрая валидация
+        is_valid, error_msg = _validate_group_identifier(group_identifier)
+        if not is_valid:
+            logger.error(f"Validation failed: {error_msg}")
+            return None
+
         try:
             # Нормализуем идентификатор группы (как в других методах)
             if isinstance(group_identifier, int):
@@ -332,6 +395,12 @@ class GroupManager:
         Использует `messages.GetHistoryRequest(limit=0)`, что обычно возвращает `count`
         без выгрузки истории.
         """
+        # Быстрая валидация
+        is_valid, error_msg = _validate_group_identifier(group_identifier)
+        if not is_valid:
+            logger.error(f"Validation failed: {error_msg}")
+            return None
+
         try:
             # normalize identifier
             if isinstance(group_identifier, int):
@@ -368,15 +437,21 @@ class GroupManager:
     async def get_messages(self, group_identifier: Union[str, int], limit: Optional[int] = None, min_id: int = 0) -> List[Dict[str, Any]]:
         """
         Получает сообщения группы с антиспам защитой
-        
+
         Args:
             group_identifier: username группы (без @) или ID группы
             limit: Максимальное количество сообщений (None = все)
             min_id: Минимальный ID сообщения (для продолжения выгрузки)
-            
+
         Returns:
             Список словарей с информацией о сообщениях
         """
+        # Быстрая валидация
+        is_valid, error_msg = _validate_group_identifier(group_identifier)
+        if not is_valid:
+            logger.error(f"Validation failed: {error_msg}")
+            return []
+
         try:
             # Нормализуем идентификатор группы
             if isinstance(group_identifier, int):
@@ -595,6 +670,12 @@ class GroupManager:
         Returns:
             Путь к скачанному файлу или None при ошибке
         """
+        # Быстрая валидация
+        is_valid, error_msg = _validate_group_identifier(group_identifier)
+        if not is_valid:
+            logger.error(f"Validation failed: {error_msg}")
+            return None
+
         try:
             if isinstance(group_identifier, int):
                 entity_id = group_identifier
@@ -628,45 +709,56 @@ class GroupManager:
     async def send_message(self, group_identifier: Union[str, int], message_text: str) -> bool:
         """
         Отправляет сообщение в группу с антиспам защитой
-        
+
         Args:
             group_identifier: ID группы, username или название
             message_text: Текст сообщения для отправки
-            
+
         Returns:
             True если сообщение отправлено успешно, False в случае ошибки
         """
         try:
+            entity = None
+
             # Получаем entity группы
             if isinstance(group_identifier, int):
                 entity = await _safe_api_call(self.client.get_entity, group_identifier)
             elif isinstance(group_identifier, str) and (group_identifier.startswith('-') and group_identifier[1:].isdigit()):
                 entity = await _safe_api_call(self.client.get_entity, int(group_identifier))
+            elif isinstance(group_identifier, str) and ' ' in group_identifier:
+                # Название с пробелами — ищем только через диалоги
+                logger.info(f"Searching for group by title: '{group_identifier}'")
+                async def search_dialogs():
+                    dialogs = []
+                    async for dialog in self.client.iter_dialogs(limit=500):
+                        if dialog.title and group_identifier.lower() in dialog.title.lower():
+                            dialogs.append(dialog)
+                    return dialogs
+
+                dialogs = await _safe_api_call(search_dialogs)
+                if not dialogs:
+                    raise ValueError(f"Группа '{group_identifier}' не найдена в диалогах")
+
+                # Ищем точное совпадение или берем первое
+                for dialog in dialogs:
+                    if dialog.title.lower() == group_identifier.lower():
+                        entity = dialog.entity
+                        break
+                else:
+                    entity = dialogs[0].entity
             else:
-                # Пробуем найти по username или названию
+                # Валидируем как username
+                is_valid, error_msg = _validate_group_identifier(group_identifier)
+                if not is_valid:
+                    logger.error(f"Validation failed: {error_msg}")
+                    return False
+
+                # Пробуем найти по username
                 group_info = await self.get_group_info(group_identifier)
                 if group_info:
                     entity = await _safe_api_call(self.client.get_entity, group_info['id'])
                 else:
-                    # Ищем по названию через диалоги
-                    async def search_dialogs():
-                        dialogs = []
-                        async for dialog in self.client.iter_dialogs():
-                            if dialog.title and group_identifier.lower() in dialog.title.lower():
-                                dialogs.append(dialog)
-                        return dialogs
-                    
-                    dialogs = await _safe_api_call(search_dialogs)
-                    if not dialogs:
-                        raise ValueError(f"Группа '{group_identifier}' не найдена")
-                    
-                    # Ищем точное совпадение или берем первое
-                    for dialog in dialogs:
-                        if dialog.title.lower() == group_identifier.lower():
-                            entity = dialog.entity
-                            break
-                    else:
-                        entity = dialogs[0].entity
+                    raise ValueError(f"Группа '{group_identifier}' не найдена")
             
             # Отправляем сообщение через safe_call с антиспам защитой
             await _safe_api_call(

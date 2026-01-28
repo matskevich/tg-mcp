@@ -157,6 +157,29 @@ async def tg_resolve_username(username: str) -> dict:
 
 
 @mcp.tool()
+async def tg_get_user_by_id(user_id: int) -> dict:
+    """Get user info by numeric Telegram ID.
+
+    Args:
+        user_id: Numeric Telegram user ID.
+    """
+    await _get_manager()  # Ensure client is initialized
+    try:
+        entity = await _client.get_entity(user_id)
+        return {
+            "id": entity.id,
+            "username": getattr(entity, 'username', None),
+            "first_name": getattr(entity, 'first_name', None),
+            "last_name": getattr(entity, 'last_name', None),
+            "phone": getattr(entity, 'phone', None),
+            "is_bot": getattr(entity, 'bot', False),
+            "is_premium": getattr(entity, 'premium', False),
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@mcp.tool()
 async def tg_download_media(group: str, message_id: int, output_dir: str = "data/downloads") -> dict:
     """Download a file/media from a Telegram message to a local directory.
 

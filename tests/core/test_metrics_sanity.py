@@ -1,7 +1,7 @@
 import asyncio
 from types import SimpleNamespace
 
-import tg_core.infra.metrics as metrics
+import tganalytics.infra.metrics as metrics
 
 
 def test_counters_increment_sanity(monkeypatch):
