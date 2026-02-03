@@ -31,7 +31,11 @@ _current_session: str | None = None
 
 
 async def _get_manager() -> GroupManager:
-    """Lazy-init: connect to default session on first tool call."""
+    """Lazy-init: connect to default session on first tool call.
+
+    Uses connect() instead of start() to avoid interactive prompts
+    that would deadlock MCP's stdio transport.
+    """
     global _client, _manager, _current_session
     if _manager is None:
         session_path = os.environ.get("TG_SESSION_PATH", "")
@@ -41,7 +45,18 @@ async def _get_manager() -> GroupManager:
         else:
             _client = get_client()
             _current_session = os.environ.get("SESSION_NAME", "default")
-        await _client.start()
+
+        # connect() instead of start() — no interactive prompts
+        await _client.connect()
+
+        # Check if session is authorized
+        if not await _client.is_user_authorized():
+            await _client.disconnect()
+            raise RuntimeError(
+                f"Session '{_current_session}' is not authorized. "
+                "Run create_telegram_session.py to re-authenticate."
+            )
+
         _manager = GroupManager(_client)
     return _manager
 
@@ -69,7 +84,17 @@ async def tg_use_session(session_name: str) -> dict:
     if _client:
         await _client.disconnect()
     _client = get_client_for_session(path)
-    await _client.start()
+
+    # connect() instead of start() — no interactive prompts
+    await _client.connect()
+
+    if not await _client.is_user_authorized():
+        await _client.disconnect()
+        return {
+            "error": f"Session '{session_name}' is not authorized. "
+            "Run create_telegram_session.py to re-authenticate."
+        }
+
     _manager = GroupManager(_client)
     _current_session = session_name
     me = await _client.get_me()
