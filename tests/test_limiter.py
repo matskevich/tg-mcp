@@ -22,6 +22,7 @@ from telethon.errors import FloodWaitError
 
 # Импортируем наши модули
 from tganalytics.infra.limiter import (
+    CircuitBreakerOpenError,
     TokenBucket, 
     RateLimiter, 
     safe_call, 
@@ -173,13 +174,17 @@ class TestRateLimiter:
         assert "date" in stats
         assert "dm_usage" in stats
         assert "join_usage" in stats
+        assert "group_msg_usage" in stats
         assert "api_calls" in stats
         assert "flood_waits" in stats
         assert "current_rps" in stats
+        assert "circuit_breaker" in stats
         
         assert stats["dm_usage"] == "0/20"
         assert stats["join_usage"] == "0/20"
+        assert stats["group_msg_usage"] == "0/30"
         assert stats["current_rps"] == 4.0
+        assert stats["circuit_breaker"]["open"] is False
 
 
 class TestSafeCall:
@@ -246,6 +251,44 @@ class TestSafeCall:
         
         assert result == "success after retry"
         assert call_count == 3  # Первый + 2 retry
+
+    @pytest.mark.asyncio
+    async def test_safe_call_group_msg_quota_exceeded(self):
+        """Тест превышения квоты group messages"""
+        limiter = get_rate_limiter()
+
+        for _ in range(limiter.max_group_msgs_per_day):
+            await limiter.increment_group_msg_counter()
+
+        async def mock_group_send():
+            return "message sent"
+
+        with pytest.raises(Exception) as exc_info:
+            await safe_call(mock_group_send, operation_type="group_msg")
+
+        assert "Group message quota exceeded" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_safe_call_circuit_breaker_blocks_calls(self):
+        """После длинного FLOOD_WAIT включается circuit breaker."""
+        limiter = get_rate_limiter()
+        limiter.flood_circuit_threshold_sec = 1
+        limiter.flood_circuit_cooldown_sec = 60
+
+        async def mock_func_with_long_flood():
+            error = FloodWaitError(request=None)
+            error.seconds = 5
+            raise error
+
+        with patch('asyncio.sleep', new_callable=AsyncMock):
+            with pytest.raises(FloodWaitError):
+                await safe_call(mock_func_with_long_flood, max_retries=0)
+
+        async def mock_ok():
+            return "ok"
+
+        with pytest.raises(CircuitBreakerOpenError):
+            await safe_call(mock_ok, max_retries=0)
     
     @pytest.mark.asyncio
     async def test_safe_call_max_retries_exceeded(self):

@@ -42,10 +42,11 @@ Telegram банит аккаунты за слишком частые API-выз
 Файл: `tganalytics/tganalytics/infra/limiter.py`
 
 Враппер для каждого API-вызова:
-1. **Проверка квот перед вызовом**: для `dm` — не более 20/день, для `join` — не более 20/день
+1. **Проверка квот перед вызовом**: для `dm` — не более 20/день, для `join` — не более 20/день, для `group_msg` — не более `MAX_GROUP_MSGS_PER_DAY`
 2. **`bucket.acquire(1)`** — ждём токен
 3. **Вызов функции**
 4. **При `FloodWaitError`** — exponential backoff: `wait_time_от_TG + base * 2^retry`, до 3 попыток
+5. **Circuit breaker** — при длинном FLOOD_WAIT (`TG_FLOOD_CIRCUIT_THRESHOLD_SEC`) все новые вызовы блокируются на cooldown (`TG_FLOOD_CIRCUIT_COOLDOWN_SEC`)
 5. **При любой другой ошибке** — сразу throw, без retry
 
 ```python
@@ -64,10 +65,14 @@ total_wait = wait_time + (base_wait * (2 ** (retry_count - 1)))
 |---------|-------|------------|
 | `dm_count` | 20/day | Отправленные DM |
 | `join_count` | 20/day | Join/leave операции |
+| `group_msg_count` | `MAX_GROUP_MSGS_PER_DAY` | Сообщения в группы/каналы |
 | `api_calls` | без лимита | Общее число вызовов |
 | `flood_waits` | алерт при >600с | Сколько раз TG заставил ждать |
 
-Счётчики хранятся в `data/anti_spam/daily_counters.txt` (plain text `key=value`), сбрасываются при смене даты. Если FLOOD_WAIT > 10 минут — логируется как `CRITICAL`.
+Счётчики хранятся в `data/anti_spam/daily_counters.txt` (plain text `key=value`), обновляются атомарно (temp + rename), сбрасываются при смене даты. Если FLOOD_WAIT > 10 минут — логируется как `CRITICAL`.
+
+Дополнительно доступен межпроцессный shared RPS бюджет (`TG_GLOBAL_RPS_MODE=shared`) через `data/anti_spam/global_rps_state.json` — это позволяет держать общий лимит при нескольких MCP-процессах.
+Состояние circuit breaker синхронизируется через `data/anti_spam/flood_circuit_state.json`.
 
 ## Уровень 4: Smart Pause — паузы для bulk-операций
 
@@ -93,6 +98,35 @@ total_wait = wait_time + (base_wait * (2 ** (retry_count - 1)))
 - **Файлы сессий** — `chmod 600` (только владелец, только чтение/запись)
 - `_harden_session_storage()` вызывается **при каждом создании клиента** и **после каждого disconnect** (на случай, если Telethon пересоздал файл)
 - Путь к сессиям настраивается через `SESSION_DIR` env, по умолчанию `data/sessions/`
+
+## Уровень 6: Блокировка direct write вне Action MCP
+
+Файл: `tganalytics/tganalytics/infra/tele_client.py`
+
+По умолчанию direct write-методы Telethon блокируются:
+- `send_message`
+- `send_file`
+- `delete_messages`
+- `edit_message`
+- `forward_messages`
+
+Также блокируются raw MTProto write-запросы через `client(Request)` (например `InviteToChannelRequest`, `DeleteChatUserRequest`, `EditBannedRequest`), если процесс не прошёл write policy.
+
+Пишущие операции разрешаются только при одном из условий:
+- процесс запущен в разрешённом write context (`TG_WRITE_CONTEXT` входит в `TG_DIRECT_TELETHON_WRITE_ALLOWED_CONTEXTS`, обычно `actions_mcp`)
+- либо явно включён debug override `TG_ALLOW_DIRECT_TELETHON_WRITE=1` (не использовать в production)
+- в strict-режиме (`TG_ENFORCE_ACTION_PROCESS=1`) контекст `actions_mcp` работает только из процесса `mcp_server_actions.py`
+
+Таким образом, нормальный рабочий контур записи в Telegram — через `tgmcp-actions` + `confirm=true` + allowlist.
+
+Дополнительные контуры безопасности в `tgmcp-actions`:
+- для non-dry-run write обязателен `confirmation_text` (явное подтверждение в текущем диалоге);
+- idempotency по хэшу action payload (chat+текст/файл/пользователь) блокирует дубли в окне 24ч;
+- повтор по тем же параметрам возможен только с `force_resend=true`.
+- для batch-задач approval не вечный: лизинг запуска ограничен `TG_ACTIONS_BATCH_APPROVAL_LEASE_SEC` (по умолчанию 24h), потом требуется re-approve.
+- запуск одного и того же batch защищён run-lease (`TG_ACTIONS_BATCH_RUN_LEASE_SEC`), чтобы 2 worker-процесса не исполняли его одновременно.
+- fail-closed startup: если ослабить базовые safety-флаги (`allowlist/confirm/approval/idempotency/write-guard`), ActionMCP автоматически блокирует write (если не задан `TG_ACTIONS_UNSAFE_OVERRIDE=1`).
+- state файлы ActionMCP (`action_approvals.json`, `action_idempotency.json`, `action_batches.json`) обновляются через file-lock + atomic replace, чтобы параллельные процессы не портили состояние.
 
 ## Enforcement: как это проверяется
 

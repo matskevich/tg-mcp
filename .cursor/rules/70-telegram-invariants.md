@@ -11,6 +11,12 @@ MUST:
 NEVER:
 - Прямые Telethon-вызовы из project code (gconf/, vahue/, apps/*)
 - Вшивать ключи/ID/сессии в код/логи
+- Любой Telegram write через direct telethon (`send_message`, `send_file`, `delete_messages`, `edit_message`, `forward_messages`) вне `tgmcp-actions`
+- Любой Telegram write через raw MTProto `client(Request)` (invite/add/remove/ban/edit/send) вне `tgmcp-actions`
+
+WRITE POLICY:
+- Telegram write — только через Action MCP tools (`tg_send_message`, `tg_send_file`, member actions)
+- Для write обязателен `confirm=true` и `TG_ACTIONS_REQUIRE_ALLOWLIST=1`
 
 SHOULD:
 - Хранить .session вне VCS; .env.sample — без секретов

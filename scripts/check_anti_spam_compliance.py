@@ -13,8 +13,10 @@ from typing import List, Tuple, Dict
 # Паттерны для поиска проблемных вызовов
 DANGEROUS_PATTERNS = [
     # Прямые вызовы к client без safe_call
-    r'await\s+(?:self\.)?client\.(get_entity|iter_participants|iter_dialogs|send_message|get_participants)',
-    r'(?:self\.)?client\.(get_entity|iter_participants|iter_dialogs|send_message|get_participants)',
+    r'await\s+(?:self\.)?client\.(get_entity|iter_participants|iter_dialogs|send_message|send_file|delete_messages|edit_message|forward_messages|get_participants)',
+    r'(?:self\.)?client\.(get_entity|iter_participants|iter_dialogs|send_message|send_file|delete_messages|edit_message|forward_messages|get_participants)',
+    # Raw MTProto вызовы через client(...)
+    r'await\s+(?:self\.)?client\(',
     
     # Async for loops с client
     r'async\s+for\s+\w+\s+in\s+(?:self\.)?client\.',

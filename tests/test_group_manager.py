@@ -5,6 +5,7 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 from telethon.errors import ChatAdminRequiredError, FloodWaitError
+from telethon.errors.rpcerrorlist import UserAlreadyParticipantError, UserNotParticipantError
 from tganalytics.domain.groups import GroupManager
 from telethon.tl.types import User
 
@@ -187,4 +188,88 @@ async def test_export_participants_to_csv_no_participants(mock_telegram_client, 
     result = await group_manager.export_participants_to_csv("testgroup", str(csv_file))
     
     assert result == False
-    assert not csv_file.exists() 
+    assert not csv_file.exists()
+
+
+@pytest.mark.asyncio
+async def test_add_member_to_group_dry_run(mock_telegram_client, mock_channel, mock_user):
+    """Dry-run добавления участника не должен делать write-операцию."""
+    mock_telegram_client.get_entity.side_effect = [mock_channel, mock_user]
+
+    group_manager = GroupManager(mock_telegram_client)
+    result = await group_manager.add_member_to_group("testgroup", "test_user", dry_run=True)
+
+    assert result["success"] is True
+    assert result["dry_run"] is True
+    assert result["action"] == "add_member"
+    assert result["user_id"] == mock_user.id
+
+
+@pytest.mark.asyncio
+async def test_add_member_to_group_already_member(mock_telegram_client, mock_channel, mock_user):
+    """Если пользователь уже в группе, операция считается идемпотентно успешной."""
+    mock_telegram_client.get_entity.side_effect = [mock_channel, mock_user]
+    mock_telegram_client.side_effect = UserAlreadyParticipantError(request=None)
+
+    group_manager = GroupManager(mock_telegram_client)
+    result = await group_manager.add_member_to_group("testgroup", "test_user", dry_run=False)
+
+    assert result["success"] is True
+    assert result["already_member"] is True
+
+
+@pytest.mark.asyncio
+async def test_remove_member_from_group_not_participant(mock_telegram_client, mock_channel, mock_user):
+    """Если пользователя нет в группе, remove считается идемпотентно успешным."""
+    mock_telegram_client.get_entity.side_effect = [mock_channel, mock_user]
+    mock_telegram_client.side_effect = UserNotParticipantError(request=None)
+
+    group_manager = GroupManager(mock_telegram_client)
+    result = await group_manager.remove_member_from_group("testgroup", "test_user", dry_run=False)
+
+    assert result["success"] is True
+    assert result["not_participant"] is True
+
+
+@pytest.mark.asyncio
+async def test_migrate_member_dry_run(mock_telegram_client, mock_channel, mock_user):
+    """Dry-run миграции возвращает план add/remove без изменений в Telegram."""
+    mock_telegram_client.get_entity.side_effect = [
+        mock_channel, mock_user,  # add preview
+        mock_channel, mock_user,  # remove preview
+    ]
+
+    group_manager = GroupManager(mock_telegram_client)
+    result = await group_manager.migrate_member(
+        group_identifier="testgroup",
+        old_user_identifier="old_user",
+        new_user_identifier="test_user",
+        dry_run=True,
+    )
+
+    assert result["success"] is True
+    assert result["dry_run"] is True
+    assert result["action"] == "migrate_member"
+    assert result["add_new_user"]["action"] == "add_member"
+    assert result["remove_old_user"]["action"] == "remove_member"
+
+
+@pytest.mark.asyncio
+async def test_send_file_success(mock_telegram_client, mock_channel):
+    """send_file использует safe путь и возвращает успех."""
+    mock_telegram_client.get_entity.return_value = mock_channel
+    mock_telegram_client.send_file = AsyncMock(return_value=MagicMock())
+
+    group_manager = GroupManager(mock_telegram_client)
+    result = await group_manager.send_file("testgroup", "/tmp/example.md", caption="")
+
+    assert result is True
+    mock_telegram_client.send_file.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_send_file_invalid_target(mock_telegram_client):
+    """При невалидной цели send_file возвращает False."""
+    group_manager = GroupManager(mock_telegram_client)
+    result = await group_manager.send_file("x", "/tmp/example.md")
+    assert result is False

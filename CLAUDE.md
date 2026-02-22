@@ -39,10 +39,11 @@
 1. **Все Telegram-вызовы через safe_call** — никаких прямых telethon вызовов
 2. **PII не коммитить** — все выгрузки в gitignored папках
 3. **Session-файлы защищены** — chmod 700/600, не коммитить
+4. **Telegram write only via Action MCP** — direct `client.send_*` и `client.delete_messages` запрещены по умолчанию
 
 ## MCP Server
 
-9 tools для доступа к Telegram API:
+Read/Actions MCP tools для доступа к Telegram API:
 
 | Tool | Назначение |
 |------|------------|
@@ -55,6 +56,9 @@
 | `tg_get_message_count` | Количество сообщений |
 | `tg_get_group_creation_date` | Дата создания группы |
 | `tg_get_stats` | Статистика anti-spam |
+| `tg_send_message` | Отправка сообщения (actions profile: dry_run -> approval_code -> confirm=true + confirmation_text) |
+| `tg_send_file` | Отправка файла (actions profile: dry_run -> approval_code -> confirm=true + confirmation_text) |
+| `tg_get_actions_policy` | Активные write-ограничения |
 
 ## Использование из другого проекта
 
@@ -62,12 +66,12 @@
 ```json
 {
   "mcpServers": {
-    "telegram": {
-      "command": "/Users/dmitrymatskevich/tganalytics/venv/bin/python3",
-      "args": ["/Users/dmitrymatskevich/tganalytics/tganalytics/mcp_server.py"],
+    "tganalytics": {
+      "command": "/Users/dmitrymatskevich/tg-mcp/venv/bin/python3",
+      "args": ["/Users/dmitrymatskevich/tg-mcp/tganalytics/mcp_server.py"],
       "env": {
-        "PYTHONPATH": "/Users/dmitrymatskevich/tganalytics/tganalytics:/Users/dmitrymatskevich/tganalytics",
-        "TG_SESSIONS_DIR": "/Users/dmitrymatskevich/tganalytics/data/sessions"
+        "PYTHONPATH": "/Users/dmitrymatskevich/tg-mcp/tganalytics:/Users/dmitrymatskevich/tg-mcp",
+        "TG_SESSIONS_DIR": "/Users/dmitrymatskevich/tg-mcp/data/sessions"
       }
     }
   }

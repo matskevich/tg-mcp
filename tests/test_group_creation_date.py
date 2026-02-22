@@ -99,6 +99,8 @@ async def test_get_group_creation_date_error(mock_telegram_client):
     
     # Настраиваем мок для выброса исключения
     async def mock_iter_messages_error(*args, **kwargs):
+        if False:
+            yield None
         raise Exception("Connection error")
     
     mock_telegram_client.iter_messages = mock_iter_messages_error

@@ -1,7 +1,7 @@
 # tg-mcp Makefile
 # ================
 
-.PHONY: install test test-limiter test-fast run-security clean setup-dirs help sync-env check-env
+.PHONY: install test test-limiter test-fast run-security clean setup-dirs help sync-env check-env run-mcp-read run-mcp-actions
 
 # Default target
 help:
@@ -14,6 +14,8 @@ help:
 	@echo "  test-limiter    - Run only anti-spam limiter tests"
 	@echo "  test-fast       - Run tests without slow integration tests"
 	@echo "  run-security    - Run security check script"
+	@echo "  run-mcp-read    - Run read-focused MCP server"
+	@echo "  run-mcp-actions - Run actions-focused MCP server"
 	@echo "  clean           - Clean up temporary files"
 
 # Sync .env from .env.sample
@@ -58,7 +60,15 @@ test: install
 # Run only anti-spam limiter tests
 test-limiter: install
 	@echo "Running anti-spam limiter tests..."
-	PYTHONPATH=tganalytics:. python -m pytest tests/core/test_limiter.py -v
+	PYTHONPATH=tganalytics:. python -m pytest tests/test_limiter.py -v
+
+run-mcp-read:
+	@echo "Starting read-focused MCP server..."
+	PYTHONPATH=tganalytics:. venv/bin/python3 tganalytics/mcp_server_read.py
+
+run-mcp-actions:
+	@echo "Starting actions-focused MCP server..."
+	PYTHONPATH=tganalytics:. venv/bin/python3 tganalytics/mcp_server_actions.py
 
 # Run fast tests (skip slow integration tests)
 test-fast: install

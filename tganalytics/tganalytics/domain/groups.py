@@ -1,12 +1,10 @@
-import asyncio
 import os
 from datetime import datetime
 from typing import List, Optional, Dict, Any, Union
 from telethon import TelegramClient
 from telethon.tl.types import User, Channel, Chat
 from telethon.errors import ChatAdminRequiredError, FloodWaitError
-from telethon.tl.functions.channels import GetParticipantsRequest
-from telethon.tl.types import ChannelParticipantsSearch
+from telethon.errors.rpcerrorlist import UserAlreadyParticipantError, UserNotParticipantError
 import logging
 from tganalytics.infra.limiter import safe_call, smart_pause
 
@@ -58,13 +56,15 @@ def _is_testing_environment():
     """Определяет тестовое окружение"""
     import sys
     return (
-        'pytest' in sys.modules or 
-        'unittest' in sys.modules or
-        os.getenv('PYTEST_CURRENT_TEST') is not None or
-        any('test' in arg.lower() for arg in sys.argv)
+        os.getenv("TG_DISABLE_RATE_LIMIT_FOR_TESTS", "1") == "1"
+        and (
+            'pytest' in sys.modules
+            or 'unittest' in sys.modules
+            or os.getenv('PYTEST_CURRENT_TEST') is not None
+        )
     )
 
-async def _safe_api_call(func, *args, **kwargs):
+async def _safe_api_call(func, *args, operation_type: str = "api", **kwargs):
     """Helper для условного использования safe_call в зависимости от окружения"""
     if _is_testing_environment():
         # В тестах используем прямые вызовы для совместимости с моками
@@ -73,7 +73,7 @@ async def _safe_api_call(func, *args, **kwargs):
     else:
         # В продакшене используем safe_call для анти-спам защиты
         logger.debug(f"[PROD] Calling {func.__name__ if hasattr(func, '__name__') else 'function'} via safe_call")
-        return await safe_call(func, operation_type="api", *args, **kwargs)
+        return await safe_call(func, operation_type=operation_type, *args, **kwargs)
 
 class GroupManager:
     """Менеджер для работы с группами Telegram"""
@@ -706,6 +706,270 @@ class GroupManager:
             logger.error(f"Error downloading media from message {message_id}: {e}")
             return None
 
+    @staticmethod
+    def _normalize_user_identifier(user_identifier: Union[str, int]) -> Union[str, int]:
+        """Нормализует идентификатор пользователя (ID или @username)."""
+        if isinstance(user_identifier, int):
+            return user_identifier
+
+        raw = str(user_identifier).strip()
+        if not raw:
+            raise ValueError("User identifier is empty")
+
+        stripped = raw.lstrip('-')
+        if stripped.isdigit():
+            return int(raw)
+
+        return raw if raw.startswith('@') else '@' + raw
+
+    async def _resolve_group_entity_for_admin(self, group_identifier: Union[str, int]) -> Union[Channel, Chat]:
+        """Резолвит группу/канал для admin-операций."""
+        if isinstance(group_identifier, int):
+            entity_id: Union[str, int] = group_identifier
+        elif (
+            isinstance(group_identifier, str)
+            and group_identifier.startswith('-')
+            and group_identifier[1:].isdigit()
+        ):
+            entity_id = int(group_identifier)
+        else:
+            is_valid, error_msg = _validate_group_identifier(str(group_identifier))
+            if not is_valid:
+                raise ValueError(error_msg)
+            entity_id = (
+                str(group_identifier) if str(group_identifier).startswith('@')
+                else '@' + str(group_identifier)
+            )
+
+        entity = await _safe_api_call(self.client.get_entity, entity_id)
+        if not isinstance(entity, (Channel, Chat)):
+            raise ValueError(f"Target '{group_identifier}' is not a group/channel")
+        return entity
+
+    async def _resolve_user_entity_for_admin(self, user_identifier: Union[str, int]) -> User:
+        """Резолвит целевого пользователя для admin-операций."""
+        normalized = self._normalize_user_identifier(user_identifier)
+        entity = await _safe_api_call(self.client.get_entity, normalized)
+        if not isinstance(entity, User):
+            raise ValueError(f"Target '{user_identifier}' is not a Telegram user")
+        return entity
+
+    async def add_member_to_group(
+        self,
+        group_identifier: Union[str, int],
+        user_identifier: Union[str, int],
+        dry_run: bool = False,
+    ) -> Dict[str, Any]:
+        """Добавляет пользователя в группу/канал с anti-spam защитой."""
+        try:
+            group_entity = await self._resolve_group_entity_for_admin(group_identifier)
+            user_entity = await self._resolve_user_entity_for_admin(user_identifier)
+
+            group_type = 'channel' if isinstance(group_entity, Channel) else 'group'
+            result = {
+                "success": True,
+                "action": "add_member",
+                "dry_run": dry_run,
+                "group_id": group_entity.id,
+                "group_type": group_type,
+                "user_id": user_entity.id,
+                "user_username": user_entity.username,
+            }
+
+            if dry_run:
+                return result
+
+            if isinstance(group_entity, Channel):
+                from telethon.tl.functions.channels import InviteToChannelRequest
+                await _safe_api_call(
+                    self.client,
+                    InviteToChannelRequest(channel=group_entity, users=[user_entity]),
+                    operation_type="join",
+                )
+            else:
+                from telethon.tl.functions.messages import AddChatUserRequest
+                await _safe_api_call(
+                    self.client,
+                    AddChatUserRequest(
+                        chat_id=group_entity.id,
+                        user_id=user_entity,
+                        fwd_limit=0,
+                    ),
+                    operation_type="join",
+                )
+
+            return result
+        except UserAlreadyParticipantError:
+            return {
+                "success": True,
+                "action": "add_member",
+                "already_member": True,
+                "dry_run": dry_run,
+                "group": str(group_identifier),
+                "user": str(user_identifier),
+            }
+        except Exception as e:
+            logger.error(f"Error adding user {user_identifier} to group {group_identifier}: {e}")
+            return {
+                "success": False,
+                "action": "add_member",
+                "dry_run": dry_run,
+                "group": str(group_identifier),
+                "user": str(user_identifier),
+                "error": str(e),
+            }
+
+    async def remove_member_from_group(
+        self,
+        group_identifier: Union[str, int],
+        user_identifier: Union[str, int],
+        dry_run: bool = False,
+    ) -> Dict[str, Any]:
+        """Удаляет пользователя из группы/канала (kick+unban для каналов)."""
+        try:
+            group_entity = await self._resolve_group_entity_for_admin(group_identifier)
+            user_entity = await self._resolve_user_entity_for_admin(user_identifier)
+
+            group_type = 'channel' if isinstance(group_entity, Channel) else 'group'
+            result = {
+                "success": True,
+                "action": "remove_member",
+                "dry_run": dry_run,
+                "group_id": group_entity.id,
+                "group_type": group_type,
+                "user_id": user_entity.id,
+                "user_username": user_entity.username,
+            }
+
+            if dry_run:
+                return result
+
+            if isinstance(group_entity, Channel):
+                from telethon.tl.functions.channels import EditBannedRequest
+                from telethon.tl.types import ChatBannedRights
+
+                ban_rights = ChatBannedRights(until_date=None, view_messages=True)
+                unban_rights = ChatBannedRights(until_date=None, view_messages=False)
+
+                await _safe_api_call(
+                    self.client,
+                    EditBannedRequest(
+                        channel=group_entity,
+                        participant=user_entity,
+                        banned_rights=ban_rights,
+                    ),
+                    operation_type="join",
+                )
+                await _safe_api_call(
+                    self.client,
+                    EditBannedRequest(
+                        channel=group_entity,
+                        participant=user_entity,
+                        banned_rights=unban_rights,
+                    ),
+                    operation_type="join",
+                )
+            else:
+                from telethon.tl.functions.messages import DeleteChatUserRequest
+                await _safe_api_call(
+                    self.client,
+                    DeleteChatUserRequest(
+                        chat_id=group_entity.id,
+                        user_id=user_entity,
+                        revoke_history=False,
+                    ),
+                    operation_type="join",
+                )
+
+            return result
+        except UserNotParticipantError:
+            return {
+                "success": True,
+                "action": "remove_member",
+                "not_participant": True,
+                "dry_run": dry_run,
+                "group": str(group_identifier),
+                "user": str(user_identifier),
+            }
+        except Exception as e:
+            logger.error(f"Error removing user {user_identifier} from group {group_identifier}: {e}")
+            return {
+                "success": False,
+                "action": "remove_member",
+                "dry_run": dry_run,
+                "group": str(group_identifier),
+                "user": str(user_identifier),
+                "error": str(e),
+            }
+
+    async def migrate_member(
+        self,
+        group_identifier: Union[str, int],
+        old_user_identifier: Union[str, int],
+        new_user_identifier: Union[str, int],
+        dry_run: bool = False,
+    ) -> Dict[str, Any]:
+        """Миграция участника: добавить новый аккаунт, затем удалить старый."""
+        if str(old_user_identifier).strip() == str(new_user_identifier).strip():
+            return {
+                "success": False,
+                "action": "migrate_member",
+                "dry_run": dry_run,
+                "group": str(group_identifier),
+                "error": "old_user_identifier and new_user_identifier are the same",
+            }
+
+        add_preview = await self.add_member_to_group(
+            group_identifier,
+            new_user_identifier,
+            dry_run=True,
+        )
+        remove_preview = await self.remove_member_from_group(
+            group_identifier,
+            old_user_identifier,
+            dry_run=True,
+        )
+
+        if dry_run:
+            return {
+                "success": add_preview.get("success", False) and remove_preview.get("success", False),
+                "action": "migrate_member",
+                "dry_run": True,
+                "group": str(group_identifier),
+                "add_new_user": add_preview,
+                "remove_old_user": remove_preview,
+            }
+
+        add_result = await self.add_member_to_group(
+            group_identifier,
+            new_user_identifier,
+            dry_run=False,
+        )
+        if not add_result.get("success"):
+            return {
+                "success": False,
+                "action": "migrate_member",
+                "dry_run": False,
+                "group": str(group_identifier),
+                "error": "Failed to add new user; old user was not removed",
+                "add_new_user": add_result,
+                "remove_old_user": None,
+            }
+
+        remove_result = await self.remove_member_from_group(
+            group_identifier,
+            old_user_identifier,
+            dry_run=False,
+        )
+        return {
+            "success": bool(remove_result.get("success")),
+            "action": "migrate_member",
+            "dry_run": False,
+            "group": str(group_identifier),
+            "add_new_user": add_result,
+            "remove_old_user": remove_result,
+        }
+
     async def send_message(self, group_identifier: Union[str, int], message_text: str) -> bool:
         """
         Отправляет сообщение в группу с антиспам защитой
@@ -718,53 +982,14 @@ class GroupManager:
             True если сообщение отправлено успешно, False в случае ошибки
         """
         try:
-            entity = None
-
-            # Получаем entity группы
-            if isinstance(group_identifier, int):
-                entity = await _safe_api_call(self.client.get_entity, group_identifier)
-            elif isinstance(group_identifier, str) and (group_identifier.startswith('-') and group_identifier[1:].isdigit()):
-                entity = await _safe_api_call(self.client.get_entity, int(group_identifier))
-            elif isinstance(group_identifier, str) and ' ' in group_identifier:
-                # Название с пробелами — ищем только через диалоги
-                logger.info(f"Searching for group by title: '{group_identifier}'")
-                async def search_dialogs():
-                    dialogs = []
-                    async for dialog in self.client.iter_dialogs(limit=500):
-                        if dialog.title and group_identifier.lower() in dialog.title.lower():
-                            dialogs.append(dialog)
-                    return dialogs
-
-                dialogs = await _safe_api_call(search_dialogs)
-                if not dialogs:
-                    raise ValueError(f"Группа '{group_identifier}' не найдена в диалогах")
-
-                # Ищем точное совпадение или берем первое
-                for dialog in dialogs:
-                    if dialog.title.lower() == group_identifier.lower():
-                        entity = dialog.entity
-                        break
-                else:
-                    entity = dialogs[0].entity
-            else:
-                # Валидируем как username
-                is_valid, error_msg = _validate_group_identifier(group_identifier)
-                if not is_valid:
-                    logger.error(f"Validation failed: {error_msg}")
-                    return False
-
-                # Пробуем найти по username
-                group_info = await self.get_group_info(group_identifier)
-                if group_info:
-                    entity = await _safe_api_call(self.client.get_entity, group_info['id'])
-                else:
-                    raise ValueError(f"Группа '{group_identifier}' не найдена")
+            entity = await self._resolve_target_entity(group_identifier)
             
             # Отправляем сообщение через safe_call с антиспам защитой
             await _safe_api_call(
                 self.client.send_message,
                 entity,
-                message_text
+                message_text,
+                operation_type="group_msg",
             )
             
             logger.info(f"Сообщение успешно отправлено в группу {group_identifier}")
@@ -773,3 +998,62 @@ class GroupManager:
         except Exception as e:
             logger.error(f"Ошибка при отправке сообщения в группу {group_identifier}: {e}")
             return False
+
+    async def send_file(self, group_identifier: Union[str, int], file_path: str, caption: str = "") -> bool:
+        """Отправляет файл в группу/чат с антиспам защитой."""
+        try:
+            entity = await self._resolve_target_entity(group_identifier)
+            await _safe_api_call(
+                self.client.send_file,
+                entity,
+                file_path,
+                caption=caption,
+                operation_type="group_msg",
+            )
+            logger.info(f"Файл успешно отправлен в группу {group_identifier}")
+            return True
+        except Exception as e:
+            logger.error(f"Ошибка при отправке файла в группу {group_identifier}: {e}")
+            return False
+
+    async def _resolve_target_entity(self, group_identifier: Union[str, int]):
+        """Разрешает target в Telethon entity для write-операций."""
+        entity = None
+
+        if isinstance(group_identifier, int):
+            return await _safe_api_call(self.client.get_entity, group_identifier)
+
+        if isinstance(group_identifier, str) and (group_identifier.startswith('-') and group_identifier[1:].isdigit()):
+            return await _safe_api_call(self.client.get_entity, int(group_identifier))
+
+        if isinstance(group_identifier, str) and ' ' in group_identifier:
+            # Название с пробелами — ищем только через диалоги
+            logger.info(f"Searching for group by title: '{group_identifier}'")
+
+            async def search_dialogs():
+                dialogs = []
+                async for dialog in self.client.iter_dialogs(limit=500):
+                    if dialog.title and group_identifier.lower() in dialog.title.lower():
+                        dialogs.append(dialog)
+                return dialogs
+
+            dialogs = await _safe_api_call(search_dialogs)
+            if not dialogs:
+                raise ValueError(f"Группа '{group_identifier}' не найдена в диалогах")
+
+            for dialog in dialogs:
+                if dialog.title.lower() == group_identifier.lower():
+                    entity = dialog.entity
+                    break
+            if entity is None:
+                entity = dialogs[0].entity
+            return entity
+
+        is_valid, error_msg = _validate_group_identifier(str(group_identifier))
+        if not is_valid:
+            raise ValueError(error_msg)
+
+        group_info = await self.get_group_info(str(group_identifier))
+        if group_info:
+            return await _safe_api_call(self.client.get_entity, group_info['id'])
+        raise ValueError(f"Группа '{group_identifier}' не найдена")

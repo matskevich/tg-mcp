@@ -1,12 +1,61 @@
 {
   "mcpServers": {
-    "tganalytics": {
+    "tgmcp-read": {
       "command": "venv/bin/python3",
-      "args": ["tganalytics/mcp_server.py"],
+      "args": ["tganalytics/mcp_server_read.py"],
       "env": {
         "PYTHONPATH": "tganalytics:.",
         "TG_SESSIONS_DIR": "data/sessions",
-        "TG_SESSION_PATH": "data/sessions/gconf_support.session"
+        "TG_SESSION_PATH": "data/sessions/dmatskevich_ro.session",
+        "TG_ALLOW_SESSION_SWITCH": "0",
+        "TG_BLOCK_DIRECT_TELETHON_WRITE": "1",
+        "TG_ALLOW_DIRECT_TELETHON_WRITE": "0",
+        "TG_ENFORCE_ACTION_PROCESS": "1",
+        "TG_DIRECT_TELETHON_WRITE_ALLOWED_CONTEXTS": "actions_mcp",
+        "TG_WRITE_CONTEXT": "read_mcp",
+        "TG_ACTION_PROCESS": "0",
+        "TG_SESSION_LOCK_MODE": "shared",
+        "TG_GLOBAL_RPS_MODE": "shared",
+        "TG_FLOOD_CIRCUIT_THRESHOLD_SEC": "300",
+        "TG_FLOOD_CIRCUIT_COOLDOWN_SEC": "900"
+      }
+    },
+    "tgmcp-actions": {
+      "command": "venv/bin/python3",
+      "args": ["tganalytics/mcp_server_actions.py"],
+      "env": {
+        "PYTHONPATH": "tganalytics:.",
+        "TG_SESSIONS_DIR": "data/sessions",
+        "TG_SESSION_PATH": "data/sessions/dmatskevich.session",
+        "TG_ALLOW_SESSION_SWITCH": "0",
+        "TG_ACTIONS_ENABLED": "1",
+        "TG_ACTIONS_REQUIRE_ALLOWLIST": "1",
+        "TG_ACTIONS_ALLOWED_GROUPS": "",
+        "TG_ACTIONS_MAX_MESSAGE_LEN": "2000",
+        "TG_ACTIONS_MAX_FILE_MB": "20",
+        "TG_ACTIONS_REQUIRE_CONFIRMATION_TEXT": "1",
+        "TG_ACTIONS_CONFIRMATION_PHRASE": "отправляй",
+        "TG_ACTIONS_MIN_CONFIRM_TEXT_LEN": "6",
+        "TG_ACTIONS_REQUIRE_APPROVAL_CODE": "1",
+        "TG_ACTIONS_APPROVAL_TTL_SEC": "1800",
+        "TG_ACTIONS_APPROVAL_FILE": "data/anti_spam/action_approvals.json",
+        "TG_ACTIONS_IDEMPOTENCY_ENABLED": "1",
+        "TG_ACTIONS_IDEMPOTENCY_WINDOW_SEC": "86400",
+        "TG_ACTIONS_BATCH_FILE": "data/anti_spam/action_batches.json",
+        "TG_ACTIONS_BATCH_TTL_HOURS": "168",
+        "TG_ACTIONS_BATCH_APPROVAL_LEASE_SEC": "86400",
+        "TG_ACTIONS_BATCH_RUN_LEASE_SEC": "1800",
+        "TG_BLOCK_DIRECT_TELETHON_WRITE": "1",
+        "TG_ALLOW_DIRECT_TELETHON_WRITE": "0",
+        "TG_ENFORCE_ACTION_PROCESS": "1",
+        "TG_DIRECT_TELETHON_WRITE_ALLOWED_CONTEXTS": "actions_mcp",
+        "TG_WRITE_CONTEXT": "actions_mcp",
+        "TG_ACTION_PROCESS": "1",
+        "TG_SESSION_LOCK_MODE": "shared",
+        "TG_GLOBAL_RPS_MODE": "shared",
+        "TG_FLOOD_CIRCUIT_THRESHOLD_SEC": "300",
+        "TG_FLOOD_CIRCUIT_COOLDOWN_SEC": "900",
+        "MAX_GROUP_MSGS_PER_DAY": "30"
       }
     }
   }
