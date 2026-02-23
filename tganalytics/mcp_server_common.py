@@ -5,6 +5,7 @@ from __future__ import annotations
 import glob
 import os
 from typing import Any
+from pathlib import Path
 
 from dotenv import load_dotenv
 
@@ -42,7 +43,8 @@ class MCPServerContext:
             await client.disconnect()
             raise RuntimeError(
                 f"Session '{session_name}' is not authorized. "
-                "Run create_telegram_session.py to re-authenticate."
+                "Run create_telegram_session.py (or scripts/create_session_qr.py) to re-authenticate. "
+                "Telegram login code usually arrives in-app (SentCodeTypeApp), not SMS."
             )
         self._client = client
         self._current_session = session_name
@@ -94,3 +96,47 @@ class MCPServerContext:
             return {"error": str(exc)}
         except Exception as exc:
             return {"error": f"Failed to switch session: {exc}"}
+
+    async def auth_status(self) -> dict[str, Any]:
+        """Return authorization status for current/default Telegram session."""
+        session_path = os.environ.get("TG_SESSION_PATH", "").strip()
+        if session_path:
+            resolved_path = str(Path(session_path).expanduser().resolve())
+            session_name = Path(session_path).name.replace(".session", "")
+            client = self._client or get_client_for_session(session_path)
+            is_transient = self._client is None
+        else:
+            resolved_path = ""
+            session_name = os.environ.get("SESSION_NAME", "default")
+            client = self._client or get_client()
+            is_transient = self._client is None
+
+        try:
+            await client.connect()
+            authorized = await client.is_user_authorized()
+            payload: dict[str, Any] = {
+                "authorized": bool(authorized),
+                "session_name": session_name,
+                "session_path": resolved_path or None,
+            }
+            if authorized:
+                me = await client.get_me()
+                payload["account"] = {
+                    "id": getattr(me, "id", None),
+                    "username": getattr(me, "username", None),
+                    "first_name": getattr(me, "first_name", None),
+                }
+            return payload
+        except Exception as exc:
+            return {
+                "authorized": False,
+                "session_name": session_name,
+                "session_path": resolved_path or None,
+                "error": str(exc),
+            }
+        finally:
+            if is_transient:
+                try:
+                    await client.disconnect()
+                except Exception:
+                    pass

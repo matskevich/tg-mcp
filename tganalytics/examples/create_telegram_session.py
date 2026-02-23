@@ -14,6 +14,7 @@ Usage:
 
 import argparse
 import asyncio
+import os
 import sys
 from pathlib import Path
 
@@ -25,8 +26,12 @@ for p in (str(PKG_DIR), str(TG_CORE_DIR)):
     if p not in sys.path:
         sys.path.insert(0, p)
 
+# Allow auth-only bootstrap requests for this helper.
+os.environ.setdefault("TG_AUTH_BOOTSTRAP", "1")
+
 from tganalytics.infra.tele_client import get_client_for_session
 from tganalytics.infra.limiter import safe_call
+from telethon.errors import SessionPasswordNeededError, PhoneCodeInvalidError
 
 
 async def main() -> None:
@@ -53,11 +58,19 @@ async def main() -> None:
         await client.start()
         me = await safe_call(client.get_me, operation_type="api")
         print(f"✅ logged in as: @{me.username} (id={me.id})")
+    except PhoneCodeInvalidError:
+        print("❌ invalid login code.")
+        print("   hint: telegram often sends code to in-app chat (SentCodeTypeApp), not SMS.")
+        print("   check Telegram app: chats, archived folder, and active sessions on other devices.")
+        raise
+    except SessionPasswordNeededError:
+        print("❌ 2FA password is required and was not provided.")
+        print("   rerun and complete the 2FA prompt.")
+        raise
     finally:
         await client.disconnect()
 
 
 if __name__ == "__main__":
     asyncio.run(main())
-
 

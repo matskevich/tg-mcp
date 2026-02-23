@@ -149,5 +149,11 @@ async def tg_get_stats() -> dict:
     }
 
 
+@mcp.tool()
+async def tg_auth_status() -> dict:
+    """Check whether current/default Telegram session is authorized."""
+    return await ctx.auth_status()
+
+
 if __name__ == "__main__":
     mcp.run(transport="stdio")

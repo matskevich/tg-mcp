@@ -1,0 +1,74 @@
+name: auth-onboarding bug
+description: report session bootstrap/auth issues (code login, qr, unauthorized session)
+title: "[auth] "
+labels:
+  - bug
+  - auth
+body:
+  - type: markdown
+    attributes:
+      value: |
+        attach the minimum diagnostics needed to reproduce and fix quickly.
+
+  - type: input
+    id: os_python
+    attributes:
+      label: os + python version
+      description: example: macos 15.2, python 3.12.12
+    validations:
+      required: true
+
+  - type: input
+    id: commit_hash
+    attributes:
+      label: tg-mcp commit hash
+      description: output of `git rev-parse --short HEAD`
+    validations:
+      required: true
+
+  - type: textarea
+    id: command
+    attributes:
+      label: exact command
+      description: full command you ran (create session, qr, check script, etc.)
+      render: bash
+    validations:
+      required: true
+
+  - type: textarea
+    id: traceback
+    attributes:
+      label: full traceback (no secrets)
+      description: redact api hash/session secrets before posting
+      render: text
+    validations:
+      required: true
+
+  - type: dropdown
+    id: sent_code_type
+    attributes:
+      label: telegram code delivery type
+      options:
+        - sentcodetypeapp (in-app)
+        - sms
+        - call
+        - unknown
+    validations:
+      required: true
+
+  - type: dropdown
+    id: code_arrival
+    attributes:
+      label: did code arrive?
+      options:
+        - code arrived in app
+        - code arrived via sms
+        - code did not arrive
+    validations:
+      required: true
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: additional context
+      description: active sessions/devices, retries, qr fallback result, anything else useful

@@ -15,6 +15,7 @@ Keep these values in production:
 - `TG_BLOCK_DIRECT_TELETHON_WRITE=1`
 - `TG_ALLOW_DIRECT_TELETHON_WRITE=0`
 - `TG_ENFORCE_ACTION_PROCESS=1`
+- `TG_AUTH_BOOTSTRAP=0` (enable only temporarily for session login helpers)
 - `TG_ACTIONS_UNSAFE_OVERRIDE=0`
 
 Action MCP is fail-closed: if baseline is weakened, writes are auto-blocked unless `TG_ACTIONS_UNSAFE_OVERRIDE=1`.

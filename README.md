@@ -1,6 +1,8 @@
-# tg-mcp
+# tg-mcp (tg-mcp-guarded)
 
 MCP server + Python library for Telegram API with built-in rate limiting, anti-spam protection, and session management.
+
+Dual-plane Telegram MCP: read-only analytics + guarded write actions with anti-spam and block-risk controls.
 
 ## What is this?
 
@@ -12,6 +14,14 @@ MCP server + Python library for Telegram API with built-in rate limiting, anti-s
 - **Circuit breaker** — auto cooldown after long FLOOD_WAIT events
 - **Session security** — chmod 700/600 hardening for session files
 - **Data exporters** — participants, messages, groups, dialogs
+
+## Positioning
+
+`tg-mcp-guarded` emphasizes what makes this project different from generic Telegram MCP integrations:
+
+- **Risk split by design** — separate `tgmcp-read` and `tgmcp-actions` servers
+- **Guarded write path** — write operations only via Action MCP policy gates
+- **Block-risk awareness** — anti-flood, anti-spam, retry/backoff, and circuit-breaker defaults
 
 ## Quick Start
 
@@ -27,6 +37,59 @@ cp .env.sample .env
 
 # Run tests
 PYTHONPATH=tganalytics:. python3 -m pytest tests/ -q
+```
+
+## Session Bootstrap (Auth)
+
+`read` profile remains write-safe, but initial Telegram login requires auth requests.
+Use dedicated auth bootstrap helpers:
+
+```bash
+# Interactive code login (enables auth-only requests internally)
+PYTHONPATH=tganalytics:. python3 tganalytics/examples/create_telegram_session.py \
+  --session-name my_read
+
+# QR login fallback (more reliable when code is delayed)
+PYTHONPATH=tganalytics:. python3 scripts/create_session_qr.py \
+  --session-name my_read
+```
+
+Where to find login code:
+
+- Telegram app in-app message (most common, `SentCodeTypeApp`)
+- Archived chats folder
+- Another active device/session notifications
+
+## Secrets Without `.env` (Keychain / Secret Provider)
+
+`TG_API_ID` and `TG_API_HASH` can be loaded from secrets providers:
+
+- `TG_SECRET_PROVIDER=env` (default): read plain env values
+- `TG_SECRET_PROVIDER=keychain`: load from macOS Keychain
+- `TG_SECRET_PROVIDER=command`: load from command outputs
+
+### macOS Keychain example
+
+```bash
+security add-generic-password -a TG_API_ID -s tg-mcp -w "12345678" -U
+security add-generic-password -a TG_API_HASH -s tg-mcp -w "your_api_hash" -U
+```
+
+Set env:
+
+```bash
+TG_SECRET_PROVIDER=keychain
+TG_KEYCHAIN_SERVICE=tg-mcp
+TG_KEYCHAIN_ACCOUNT_API_ID=TG_API_ID
+TG_KEYCHAIN_ACCOUNT_API_HASH=TG_API_HASH
+```
+
+### Generic command provider example
+
+```bash
+TG_SECRET_PROVIDER=command
+TG_SECRET_CMD_API_ID="pass tg/api_id"
+TG_SECRET_CMD_API_HASH="pass tg/api_hash"
 ```
 
 ## Agent Onboarding
@@ -61,6 +124,57 @@ python3 scripts/render_mcp_config.py \
   --profile full \
   --read-session-name my_read \
   --actions-session-name my_actions
+```
+
+## Global MCP Setup (All Projects in Codex)
+
+For one global setup across all working directories, add servers via `codex mcp add`.
+Use one shared `TG_SESSION_PATH` for your read session.
+
+```bash
+REPO="/absolute/path/to/tg-mcp"
+
+codex mcp add tgmcp-read \
+  --env PYTHONPATH="$REPO/tganalytics:$REPO" \
+  --env TG_SESSIONS_DIR="$REPO/data/sessions" \
+  --env TG_SESSION_PATH="$REPO/data/sessions/my_read.session" \
+  --env TG_ALLOW_SESSION_SWITCH=0 \
+  --env TG_BLOCK_DIRECT_TELETHON_WRITE=1 \
+  --env TG_ALLOW_DIRECT_TELETHON_WRITE=0 \
+  --env TG_ENFORCE_ACTION_PROCESS=1 \
+  --env TG_DIRECT_TELETHON_WRITE_ALLOWED_CONTEXTS=actions_mcp \
+  --env TG_WRITE_CONTEXT=read_mcp \
+  --env TG_ACTION_PROCESS=0 \
+  --env TG_SESSION_LOCK_MODE=shared \
+  --env TG_GLOBAL_RPS_MODE=shared \
+  -- "$REPO/venv/bin/python3" "$REPO/tganalytics/mcp_server_read.py"
+```
+
+Optional actions server:
+
+```bash
+REPO="/absolute/path/to/tg-mcp"
+
+codex mcp add tgmcp-actions \
+  --env PYTHONPATH="$REPO/tganalytics:$REPO" \
+  --env TG_SESSIONS_DIR="$REPO/data/sessions" \
+  --env TG_SESSION_PATH="$REPO/data/sessions/my_actions.session" \
+  --env TG_ALLOW_SESSION_SWITCH=0 \
+  --env TG_ACTIONS_ENABLED=1 \
+  --env TG_ACTIONS_REQUIRE_ALLOWLIST=1 \
+  --env TG_ACTIONS_ALLOWED_GROUPS="" \
+  --env TG_ACTIONS_REQUIRE_CONFIRMATION_TEXT=1 \
+  --env TG_ACTIONS_REQUIRE_APPROVAL_CODE=1 \
+  --env TG_ACTIONS_IDEMPOTENCY_ENABLED=1 \
+  --env TG_BLOCK_DIRECT_TELETHON_WRITE=1 \
+  --env TG_ALLOW_DIRECT_TELETHON_WRITE=0 \
+  --env TG_ENFORCE_ACTION_PROCESS=1 \
+  --env TG_DIRECT_TELETHON_WRITE_ALLOWED_CONTEXTS=actions_mcp \
+  --env TG_WRITE_CONTEXT=actions_mcp \
+  --env TG_ACTION_PROCESS=1 \
+  --env TG_SESSION_LOCK_MODE=shared \
+  --env TG_GLOBAL_RPS_MODE=shared \
+  -- "$REPO/venv/bin/python3" "$REPO/tganalytics/mcp_server_actions.py"
 ```
 
 ## MCP Servers
@@ -150,6 +264,7 @@ Add to your project's `.mcp.json`:
 | `tg_get_user_by_id` | Get user by numeric ID |
 | `tg_download_media` | Download media from message |
 | `tg_get_stats` | Anti-spam system stats |
+| `tg_auth_status` | Check current session authorization status |
 
 ### Actions Tools
 
@@ -172,6 +287,7 @@ Add to your project's `.mcp.json`:
 | `tg_run_add_member_batch` | Run approved batch in chunks (no per-group approvals) |
 | `tg_get_actions_policy` | Show active action restrictions |
 | `tg_get_stats` | Anti-spam system stats |
+| `tg_auth_status` | Check current session authorization status |
 
 ### Session Concurrency
 
@@ -226,4 +342,13 @@ See [docs/ANTISPAM_SECURITY.md](docs/ANTISPAM_SECURITY.md) for details.
 
 ## License
 
-MIT
+MIT. See [LICENSE](LICENSE).
+
+## Governance
+
+This is an open-source project with maintainer-led merge policy:
+
+- external contributors are welcome via issues and pull requests
+- commits to `main` are performed by maintainer only
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).

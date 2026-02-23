@@ -1,6 +1,8 @@
 import os
 import asyncio
 import atexit
+import shlex
+import subprocess
 import sys
 from pathlib import Path
 from telethon import TelegramClient
@@ -31,6 +33,7 @@ SESSION_LOCK_MODE = os.getenv("TG_SESSION_LOCK_MODE", "shared").strip().lower()
 WRITE_GUARD_ENABLED = os.getenv("TG_BLOCK_DIRECT_TELETHON_WRITE", "1") == "1"
 ALLOW_DIRECT_WRITE = os.getenv("TG_ALLOW_DIRECT_TELETHON_WRITE", "0") == "1"
 ENFORCE_ACTION_PROCESS = os.getenv("TG_ENFORCE_ACTION_PROCESS", "1") == "1"
+AUTH_BOOTSTRAP_ENABLED = os.getenv("TG_AUTH_BOOTSTRAP", "0") == "1"
 ACTION_PROCESS_MARKER = os.getenv("TG_ACTION_PROCESS", "0") == "1"
 WRITE_CONTEXT = os.getenv("TG_WRITE_CONTEXT", "").strip().lower()
 WRITE_ALLOWED_CONTEXTS = {
@@ -80,6 +83,19 @@ WRITE_REQUEST_PREFIXES = (
     "Unban",
 )
 
+# Explicit auth bootstrap allowlist. Enabled only with TG_AUTH_BOOTSTRAP=1.
+# This unlocks Telegram login flows without enabling general write operations.
+AUTH_BOOTSTRAP_ALLOWED_REQUESTS = {
+    "SendCodeRequest",
+    "ResendCodeRequest",
+    "SignInRequest",
+    "CheckPasswordRequest",
+    "GetPasswordRequest",
+    "ExportLoginTokenRequest",
+    "ImportLoginTokenRequest",
+    "AcceptLoginTokenRequest",
+}
+
 # Усиление прав доступа для каталога/файлов сессии
 def _harden_session_storage(directory: Path, session_file: Path) -> None:
     try:
@@ -98,14 +114,89 @@ def _harden_session_storage(directory: Path, session_file: Path) -> None:
     except Exception:
         pass
 
-api_id   = int(os.getenv("TG_API_ID", 0))
-api_hash = os.getenv("TG_API_HASH", "")
+def _read_secret_from_command(env_var: str) -> str:
+    cmd = os.getenv(env_var, "").strip()
+    if not cmd:
+        return ""
+    try:
+        parts = shlex.split(cmd)
+    except Exception:
+        return ""
+    if not parts:
+        return ""
+    try:
+        proc = subprocess.run(
+            parts,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except Exception:
+        return ""
+    if proc.returncode != 0:
+        return ""
+    return (proc.stdout or "").strip()
+
+
+def _read_secret_from_keychain(service: str, account: str) -> str:
+    if not service or not account:
+        return ""
+    try:
+        proc = subprocess.run(
+            ["security", "find-generic-password", "-s", service, "-a", account, "-w"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except Exception:
+        return ""
+    if proc.returncode != 0:
+        return ""
+    return (proc.stdout or "").strip()
+
+
+def _load_api_credentials() -> tuple[str, str]:
+    provider = os.getenv("TG_SECRET_PROVIDER", "").strip().lower()
+    if not provider and os.getenv("TG_USE_KEYCHAIN", "0") == "1":
+        provider = "keychain"
+    if not provider:
+        provider = "env"
+
+    raw_api_id = os.getenv("TG_API_ID", "").strip()
+    raw_api_hash = os.getenv("TG_API_HASH", "").strip()
+
+    if provider == "keychain":
+        service = os.getenv("TG_KEYCHAIN_SERVICE", "tg-mcp").strip()
+        id_account = os.getenv("TG_KEYCHAIN_ACCOUNT_API_ID", "TG_API_ID").strip()
+        hash_account = os.getenv("TG_KEYCHAIN_ACCOUNT_API_HASH", "TG_API_HASH").strip()
+        if not raw_api_id:
+            raw_api_id = _read_secret_from_keychain(service, id_account)
+        if not raw_api_hash:
+            raw_api_hash = _read_secret_from_keychain(service, hash_account)
+    elif provider == "command":
+        if not raw_api_id:
+            raw_api_id = _read_secret_from_command("TG_SECRET_CMD_API_ID")
+        if not raw_api_hash:
+            raw_api_hash = _read_secret_from_command("TG_SECRET_CMD_API_HASH")
+
+    return raw_api_id, raw_api_hash
+
+
+raw_api_id, api_hash = _load_api_credentials()
+try:
+    api_id = int(raw_api_id) if raw_api_id else 0
+except ValueError:
+    api_id = 0
+
 session_name = os.getenv("SESSION_NAME", "s16_session")
 session_path = str(SESSION_DIR / session_name)
 
 # Проверка конфигурации
 if not api_id or not api_hash:
-    raise ValueError("❌ Необходимо указать TG_API_ID и TG_API_HASH в .env файле")
+    raise ValueError(
+        "❌ Missing TG API credentials. Set TG_API_ID/TG_API_HASH in env, "
+        "or configure TG_SECRET_PROVIDER=keychain|command."
+    )
 
 _client = None
 _clients_by_path = {}
@@ -150,6 +241,8 @@ def _is_telethon_write_request(request: object) -> bool:
         return False
 
     name = getattr(request_cls, "__name__", "")
+    if AUTH_BOOTSTRAP_ENABLED and name in AUTH_BOOTSTRAP_ALLOWED_REQUESTS:
+        return False
     if any(name.startswith(prefix) for prefix in READ_REQUEST_PREFIXES):
         return False
     if any(name.startswith(prefix) for prefix in WRITE_REQUEST_PREFIXES):
@@ -167,7 +260,8 @@ def _contains_telethon_write_request(request: object) -> bool:
 def _raise_write_guard_error(method_name: str) -> None:
     raise PermissionError(
         f"Direct Telegram write '{method_name}' is blocked by default. "
-        "Use tgmcp-actions (Action MCP) with confirm=true and allowlist."
+        "Use tgmcp-actions (Action MCP) with confirm=true and allowlist. "
+        "For session bootstrap only, set TG_AUTH_BOOTSTRAP=1."
     )
 
 

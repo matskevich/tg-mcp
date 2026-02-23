@@ -7,6 +7,7 @@ This guide is for AI agents and operators who need to work with `tg-mcp` quickly
 - `tgmcp-read`: analytics and discovery only (`tg_get_*`, `tg_list_sessions`, `tg_resolve_username`, etc.).
 - `tgmcp-actions`: any Telegram write (`tg_send_message`, `tg_send_file`, add/remove/migrate member).
 - Direct Telethon write is blocked by default outside Action MCP.
+- Session bootstrap auth is allowed only in explicit mode (`TG_AUTH_BOOTSTRAP=1`).
 - For new installations, prefer `read` profile first (`scripts/render_mcp_config.py --profile read`).
 
 ## 2. First 60 Seconds Checklist
@@ -62,8 +63,16 @@ Use this when user wants one approval and then autonomous processing of many gro
 - `approval_code is required/expired`: re-run same call with `dry_run=true` first.
 - `Duplicate action blocked`: do not retry blindly; ask before `force_resend=true`.
 - `batch is already running by another worker`: wait for run lease or retry later.
+- `Direct Telegram write 'SendCodeRequest' is blocked`: run session bootstrap helper (sets `TG_AUTH_BOOTSTRAP=1`) or set the flag only for auth flow.
 
-## 6. Multi-Project Usage
+## 6. Auth Diagnostics
+
+- Use `tg_auth_status` to verify `authorized=true/false` and current session identity.
+- Use `scripts/create_session_qr.py` if app/SMS code flow is unreliable.
+- Login code usually comes via Telegram app (`SentCodeTypeApp`), not SMS.
+- If `.env` is restricted, use `TG_SECRET_PROVIDER=keychain|command` for `TG_API_ID/TG_API_HASH`.
+
+## 7. Multi-Project Usage
 
 - Shared session is supported with `TG_SESSION_LOCK_MODE=shared`.
 - Shared RPS/circuit state is supported with common `data/anti_spam` and `TG_GLOBAL_RPS_MODE=shared`.
@@ -71,7 +80,7 @@ Use this when user wants one approval and then autonomous processing of many gro
 - separate read/actions sessions
 - dedicated OS user for MCP process
 
-## 7. Never Do This
+## 8. Never Do This
 
 - Never bypass MCP with direct Telethon writes from shell scripts.
 - Never disable allowlist/confirmation/approval/idempotency in production.
