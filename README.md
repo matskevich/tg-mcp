@@ -37,6 +37,32 @@ Start here if this repository will be used by other AI agents/operators:
 - [Action Policy Toggles](docs/ACTION_POLICY_TOGGLES.md) - what can be toggled and safe change procedure
 - [Anti-spam and Security Model](docs/ANTISPAM_SECURITY.md) - deeper technical details
 
+## Installation Profiles
+
+Use one repository, choose profile by risk level:
+
+- `read` profile: installs only `tgmcp-read` (recommended default for new users)
+- `full` profile: installs `tgmcp-read` + `tgmcp-actions`
+
+Generate config:
+
+```bash
+# prereq check
+bash scripts/check_tg_mcp.sh /absolute/path/to/tg-mcp
+
+# read-only config (safe default)
+python3 scripts/render_mcp_config.py \
+  --repo /absolute/path/to/tg-mcp \
+  --profile read
+
+# full config (read + actions)
+python3 scripts/render_mcp_config.py \
+  --repo /absolute/path/to/tg-mcp \
+  --profile full \
+  --read-session-name my_read \
+  --actions-session-name my_actions
+```
+
 ## MCP Servers
 
 Add to your project's `.mcp.json`:
@@ -79,6 +105,7 @@ Add to your project's `.mcp.json`:
         "TG_ACTIONS_MIN_CONFIRM_TEXT_LEN": "6",
         "TG_ACTIONS_REQUIRE_APPROVAL_CODE": "1",
         "TG_ACTIONS_APPROVAL_TTL_SEC": "1800",
+        "TG_ACTIONS_APPROVAL_MIN_AGE_SEC": "30",
         "TG_ACTIONS_APPROVAL_FILE": "data/anti_spam/action_approvals.json",
         "TG_ACTIONS_IDEMPOTENCY_ENABLED": "1",
         "TG_ACTIONS_IDEMPOTENCY_WINDOW_SEC": "86400",
@@ -155,6 +182,7 @@ Add to your project's `.mcp.json`:
 - `TG_FLOOD_CIRCUIT_THRESHOLD_SEC` + `TG_FLOOD_CIRCUIT_COOLDOWN_SEC` pause all calls after critical FLOOD_WAIT.
 - Non-dry-run write actions require `confirm=true` and exact `confirmation_text` (`TG_ACTIONS_CONFIRMATION_PHRASE`).
 - Non-dry-run write actions also require one-time `approval_code` from the matching `dry_run` preview (`TG_ACTIONS_REQUIRE_APPROVAL_CODE=1`).
+- `approval_code` has minimum age (`TG_ACTIONS_APPROVAL_MIN_AGE_SEC`, default 30s): immediate execute right after dry_run is blocked.
 - Action MCP blocks duplicate sends/actions by payload hash for 24h (`TG_ACTIONS_IDEMPOTENCY_*`), unless `force_resend=true`.
 - Action state files (`approval/idempotency/batch`) now use file locks + atomic write, so parallel ActionMCP processes do not corrupt JSON state.
 - Batch execution uses a per-batch run lease lock (`TG_ACTIONS_BATCH_RUN_LEASE_SEC`) to avoid duplicate processing of the same batch by two workers.

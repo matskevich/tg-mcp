@@ -2,6 +2,8 @@
 
 This document explains which Action MCP settings can be changed, when, and how to do it safely.
 
+If you don't need write capabilities, install only `tgmcp-read` profile and skip Action MCP entirely.
+
 ## Default-Safe Baseline
 
 Keep these values in production:
@@ -25,6 +27,7 @@ Action MCP is fail-closed: if baseline is weakened, writes are auto-blocked unle
 | `TG_ACTIONS_MAX_MESSAGE_LEN` | `2000` | lower/raise | content-size policy |
 | `TG_ACTIONS_MAX_FILE_MB` | `20` | lower/raise | file-size policy |
 | `TG_ACTIONS_APPROVAL_TTL_SEC` | `1800` | increase slightly | slow human approval loop |
+| `TG_ACTIONS_APPROVAL_MIN_AGE_SEC` | `30` | increase | force human-review pause after dry_run |
 | `TG_ACTIONS_IDEMPOTENCY_WINDOW_SEC` | `86400` | shorten/extend | resend policy tuning |
 | `TG_ACTIONS_BATCH_TTL_HOURS` | `168` | shorten | expire stale batches earlier |
 | `TG_ACTIONS_BATCH_APPROVAL_LEASE_SEC` | `86400` | shorten/extend | one-time approval window |

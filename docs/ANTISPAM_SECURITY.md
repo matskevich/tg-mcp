@@ -121,6 +121,7 @@ total_wait = wait_time + (base_wait * (2 ** (retry_count - 1)))
 
 Дополнительные контуры безопасности в `tgmcp-actions`:
 - для non-dry-run write обязателен `confirmation_text` (явное подтверждение в текущем диалоге);
+- `approval_code` после `dry_run` нельзя использовать мгновенно: действует минимальная выдержка `TG_ACTIONS_APPROVAL_MIN_AGE_SEC` (по умолчанию 30с) для human-review паузы;
 - idempotency по хэшу action payload (chat+текст/файл/пользователь) блокирует дубли в окне 24ч;
 - повтор по тем же параметрам возможен только с `force_resend=true`.
 - для batch-задач approval не вечный: лизинг запуска ограничен `TG_ACTIONS_BATCH_APPROVAL_LEASE_SEC` (по умолчанию 24h), потом требуется re-approve.

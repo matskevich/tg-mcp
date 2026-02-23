@@ -78,6 +78,11 @@ try:
 except ValueError:
     APPROVAL_TTL_SEC = 1800
 
+try:
+    APPROVAL_MIN_AGE_SEC = int(os.environ.get("TG_ACTIONS_APPROVAL_MIN_AGE_SEC", "30"))
+except ValueError:
+    APPROVAL_MIN_AGE_SEC = 30
+
 APPROVAL_FILE = Path(os.environ.get("TG_ACTIONS_APPROVAL_FILE", "data/anti_spam/action_approvals.json"))
 
 try:
@@ -201,6 +206,8 @@ def _suggest_next_step(error: str | None) -> str | None:
         return "Run same action with dry_run=true first, then rerun with confirm=true."
     if "confirmation_text" in text:
         return f"Use exact confirmation_text='{CONFIRMATION_PHRASE}' in this thread."
+    if "too fresh right after dry_run" in text:
+        return "Wait until approval min age passes, then execute with the same approval_code."
     if "approval_code" in text:
         return "Run matching action with dry_run=true to get one-time approval_code, then execute."
     if "duplicate action blocked" in text:
@@ -314,7 +321,12 @@ def _load_approvals_state() -> dict[str, dict[str, Any]]:
             exp = float(expires_at)
         except Exception:
             continue
-        state[code] = {"digest": digest, "expires_at": exp}
+        issued_at = item.get("issued_at")
+        try:
+            issued = float(issued_at) if issued_at is not None else 0.0
+        except Exception:
+            issued = 0.0
+        state[code] = {"digest": digest, "expires_at": exp, "issued_at": issued}
     return state
 
 
@@ -331,7 +343,12 @@ def _save_approvals_state(state: dict[str, dict[str, Any]]) -> None:
             exp = float(expires_at)
         except Exception:
             continue
-        normalized[code] = {"digest": digest, "expires_at": exp}
+        issued_at = item.get("issued_at")
+        try:
+            issued = float(issued_at) if issued_at is not None else 0.0
+        except Exception:
+            issued = 0.0
+        normalized[code] = {"digest": digest, "expires_at": exp, "issued_at": issued}
 
     def _mut(current: dict[str, Any]) -> None:
         current.clear()
@@ -353,10 +370,15 @@ def _issue_approval(payload_hash: str, now_ts: float | None = None) -> dict[str,
     now = now_ts if now_ts is not None else time.time()
     code = secrets.token_urlsafe(9)
     expires_at = now + APPROVAL_TTL_SEC
+    execute_after = now + max(0, APPROVAL_MIN_AGE_SEC)
 
     def _mut(state: dict[str, Any]) -> None:
         trimmed = _trim_approvals(state, now_ts=now)
-        trimmed[code] = {"digest": payload_hash, "expires_at": expires_at}
+        trimmed[code] = {
+            "digest": payload_hash,
+            "expires_at": expires_at,
+            "issued_at": float(now),
+        }
         state.clear()
         state.update(trimmed)
 
@@ -365,6 +387,8 @@ def _issue_approval(payload_hash: str, now_ts: float | None = None) -> dict[str,
         "approval_code": code,
         "approval_expires_in_sec": APPROVAL_TTL_SEC,
         "approval_expires_at_ts": int(expires_at),
+        "approval_min_age_sec": max(0, APPROVAL_MIN_AGE_SEC),
+        "approval_execute_after_ts": int(execute_after),
     }
 
 
@@ -390,6 +414,15 @@ def _consume_approval(payload_hash: str, approval_code: str, now_ts: float | Non
             return (
                 False,
                 "Execution blocked: approval_code does not match this payload. Generate a fresh dry_run preview.",
+            )
+        issued_at = float(item.get("issued_at") or 0.0)
+        earliest_exec_ts = issued_at + max(0, APPROVAL_MIN_AGE_SEC)
+        if now < earliest_exec_ts:
+            wait_sec = int(max(1, earliest_exec_ts - now))
+            return (
+                False,
+                "Execution blocked: approval_code is too fresh right after dry_run. "
+                f"Wait {wait_sec}s and ask human to verify preview before execute.",
             )
 
         state.pop(code, None)
@@ -1210,6 +1243,7 @@ async def tg_get_actions_policy() -> dict[str, Any]:
         "min_confirmation_text_len": MIN_CONFIRMATION_TEXT_LEN,
         "require_approval_code": REQUIRE_APPROVAL_CODE,
         "approval_ttl_sec": APPROVAL_TTL_SEC if REQUIRE_APPROVAL_CODE else None,
+        "approval_min_age_sec": APPROVAL_MIN_AGE_SEC if REQUIRE_APPROVAL_CODE else None,
         "batch_file": str(BATCH_FILE),
         "batch_default_ttl_hours": BATCH_DEFAULT_TTL_HOURS,
         "batch_approval_lease_sec": BATCH_APPROVAL_LEASE_SEC,

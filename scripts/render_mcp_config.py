@@ -1,0 +1,116 @@
+#!/usr/bin/env python3
+"""Render tg-mcp config snippet for read-only or full profile."""
+
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+
+
+def _build_read_server(repo: Path, server_name: str, session_name: str) -> dict:
+    return {
+        server_name: {
+            "command": str((repo / "venv/bin/python3").resolve()),
+            "args": [str((repo / "tganalytics/mcp_server_read.py").resolve())],
+            "env": {
+                "PYTHONPATH": f"{(repo / 'tganalytics').resolve()}:{repo.resolve()}",
+                "TG_SESSIONS_DIR": str((repo / "data/sessions").resolve()),
+                "TG_SESSION_PATH": str((repo / f"data/sessions/{session_name}.session").resolve()),
+                "TG_ALLOW_SESSION_SWITCH": "0",
+                "TG_BLOCK_DIRECT_TELETHON_WRITE": "1",
+                "TG_ALLOW_DIRECT_TELETHON_WRITE": "0",
+                "TG_ENFORCE_ACTION_PROCESS": "1",
+                "TG_DIRECT_TELETHON_WRITE_ALLOWED_CONTEXTS": "actions_mcp",
+                "TG_WRITE_CONTEXT": "read_mcp",
+                "TG_ACTION_PROCESS": "0",
+                "TG_SESSION_LOCK_MODE": "shared",
+                "TG_GLOBAL_RPS_MODE": "shared",
+                "TG_FLOOD_CIRCUIT_THRESHOLD_SEC": "300",
+                "TG_FLOOD_CIRCUIT_COOLDOWN_SEC": "900",
+            },
+        }
+    }
+
+
+def _build_actions_server(repo: Path, server_name: str, session_name: str) -> dict:
+    return {
+        server_name: {
+            "command": str((repo / "venv/bin/python3").resolve()),
+            "args": [str((repo / "tganalytics/mcp_server_actions.py").resolve())],
+            "env": {
+                "PYTHONPATH": f"{(repo / 'tganalytics').resolve()}:{repo.resolve()}",
+                "TG_SESSIONS_DIR": str((repo / "data/sessions").resolve()),
+                "TG_SESSION_PATH": str((repo / f"data/sessions/{session_name}.session").resolve()),
+                "TG_ALLOW_SESSION_SWITCH": "0",
+                "TG_ACTIONS_ENABLED": "1",
+                "TG_ACTIONS_REQUIRE_ALLOWLIST": "1",
+                "TG_ACTIONS_ALLOWED_GROUPS": "",
+                "TG_ACTIONS_MAX_MESSAGE_LEN": "2000",
+                "TG_ACTIONS_MAX_FILE_MB": "20",
+                "TG_ACTIONS_REQUIRE_CONFIRMATION_TEXT": "1",
+                "TG_ACTIONS_CONFIRMATION_PHRASE": "отправляй",
+                "TG_ACTIONS_MIN_CONFIRM_TEXT_LEN": "6",
+                "TG_ACTIONS_REQUIRE_APPROVAL_CODE": "1",
+                "TG_ACTIONS_APPROVAL_TTL_SEC": "1800",
+                "TG_ACTIONS_APPROVAL_MIN_AGE_SEC": "30",
+                "TG_ACTIONS_APPROVAL_FILE": str((repo / "data/anti_spam/action_approvals.json").resolve()),
+                "TG_ACTIONS_IDEMPOTENCY_ENABLED": "1",
+                "TG_ACTIONS_IDEMPOTENCY_WINDOW_SEC": "86400",
+                "TG_ACTIONS_IDEMPOTENCY_FILE": str((repo / "data/anti_spam/action_idempotency.json").resolve()),
+                "TG_ACTIONS_BATCH_FILE": str((repo / "data/anti_spam/action_batches.json").resolve()),
+                "TG_ACTIONS_BATCH_TTL_HOURS": "168",
+                "TG_ACTIONS_BATCH_APPROVAL_LEASE_SEC": "86400",
+                "TG_ACTIONS_BATCH_RUN_LEASE_SEC": "1800",
+                "TG_ACTIONS_UNSAFE_OVERRIDE": "0",
+                "TG_BLOCK_DIRECT_TELETHON_WRITE": "1",
+                "TG_ALLOW_DIRECT_TELETHON_WRITE": "0",
+                "TG_ENFORCE_ACTION_PROCESS": "1",
+                "TG_DIRECT_TELETHON_WRITE_ALLOWED_CONTEXTS": "actions_mcp",
+                "TG_WRITE_CONTEXT": "actions_mcp",
+                "TG_ACTION_PROCESS": "1",
+                "TG_SESSION_LOCK_MODE": "shared",
+                "TG_GLOBAL_RPS_MODE": "shared",
+                "TG_FLOOD_CIRCUIT_THRESHOLD_SEC": "300",
+                "TG_FLOOD_CIRCUIT_COOLDOWN_SEC": "900",
+                "MAX_GROUP_MSGS_PER_DAY": "30",
+            },
+        }
+    }
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--repo", required=True, help="Absolute path to tg-mcp repository")
+    parser.add_argument(
+        "--profile",
+        choices=("read", "full"),
+        default="read",
+        help="read: only tgmcp-read, full: read + actions",
+    )
+    parser.add_argument("--read-server-name", default="tgmcp-read")
+    parser.add_argument("--actions-server-name", default="tgmcp-actions")
+    parser.add_argument("--read-session-name", default="read_only_session")
+    parser.add_argument("--actions-session-name", default="actions_session")
+    parser.add_argument("--output", help="Write result to file; default stdout")
+    args = parser.parse_args()
+
+    repo = Path(args.repo).expanduser().resolve()
+    servers = {}
+    servers.update(_build_read_server(repo, args.read_server_name, args.read_session_name))
+    if args.profile == "full":
+        servers.update(_build_actions_server(repo, args.actions_server_name, args.actions_session_name))
+
+    payload = {"mcpServers": servers}
+    text = json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
+    if args.output:
+        out = Path(args.output).expanduser().resolve()
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(text, encoding="utf-8")
+    else:
+        print(text, end="")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

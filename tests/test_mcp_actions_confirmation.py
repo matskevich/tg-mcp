@@ -46,6 +46,7 @@ async def test_send_message_requires_one_time_approval_code(monkeypatch, tmp_pat
     monkeypatch.setattr(actions, "REQUIRE_APPROVAL_CODE", True)
     monkeypatch.setattr(actions, "IDEMPOTENCY_ENABLED", False)
     monkeypatch.setattr(actions, "APPROVAL_TTL_SEC", 1800)
+    monkeypatch.setattr(actions, "APPROVAL_MIN_AGE_SEC", 0)
     monkeypatch.setattr(actions, "APPROVAL_FILE", tmp_path / "approvals.json")
     monkeypatch.setattr(actions, "ctx", _FakeCtx())
 
@@ -89,3 +90,53 @@ async def test_send_message_requires_one_time_approval_code(monkeypatch, tmp_pat
     )
     assert reused["success"] is False
     assert "invalid or expired" in reused["error"]
+
+
+@pytest.mark.asyncio
+async def test_send_message_blocks_immediate_execute_after_dry_run(monkeypatch, tmp_path):
+    monkeypatch.setattr(actions, "ACTIONS_ENABLED", True)
+    monkeypatch.setattr(actions, "REQUIRE_ALLOWLIST", False)
+    monkeypatch.setattr(actions, "REQUIRE_CONFIRMATION_TEXT", True)
+    monkeypatch.setattr(actions, "CONFIRMATION_PHRASE", "отправляй")
+    monkeypatch.setattr(actions, "REQUIRE_APPROVAL_CODE", True)
+    monkeypatch.setattr(actions, "IDEMPOTENCY_ENABLED", False)
+    monkeypatch.setattr(actions, "APPROVAL_TTL_SEC", 1800)
+    monkeypatch.setattr(actions, "APPROVAL_MIN_AGE_SEC", 30)
+    monkeypatch.setattr(actions, "APPROVAL_FILE", tmp_path / "approvals.json")
+    monkeypatch.setattr(actions, "ctx", _FakeCtx())
+
+    ts = {"now": 1000.0}
+    monkeypatch.setattr(actions.time, "time", lambda: ts["now"])
+
+    preview = await actions.tg_send_message(
+        group="test_target",
+        message_text="hello",
+        dry_run=True,
+        confirm=False,
+    )
+    assert preview["success"] is True
+    approval_code = preview.get("approval_code")
+    assert approval_code
+    assert preview.get("approval_execute_after_ts") == 1030
+
+    blocked = await actions.tg_send_message(
+        group="test_target",
+        message_text="hello",
+        dry_run=False,
+        confirm=True,
+        confirmation_text="отправляй",
+        approval_code=approval_code,
+    )
+    assert blocked["success"] is False
+    assert "too fresh right after dry_run" in blocked["error"]
+
+    ts["now"] = 1031.0
+    sent = await actions.tg_send_message(
+        group="test_target",
+        message_text="hello",
+        dry_run=False,
+        confirm=True,
+        confirmation_text="отправляй",
+        approval_code=approval_code,
+    )
+    assert sent["success"] is True

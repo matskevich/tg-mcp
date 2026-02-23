@@ -7,6 +7,7 @@ This guide is for AI agents and operators who need to work with `tg-mcp` quickly
 - `tgmcp-read`: analytics and discovery only (`tg_get_*`, `tg_list_sessions`, `tg_resolve_username`, etc.).
 - `tgmcp-actions`: any Telegram write (`tg_send_message`, `tg_send_file`, add/remove/migrate member).
 - Direct Telethon write is blocked by default outside Action MCP.
+- For new installations, prefer `read` profile first (`scripts/render_mcp_config.py --profile read`).
 
 ## 2. First 60 Seconds Checklist
 
@@ -33,7 +34,9 @@ If any check fails, stop write execution and report policy mismatch.
 - `confirm=true`
 - exact `confirmation_text`
 - `approval_code` from step 1
-4. If duplicate blocked:
+4. Respect approval min-age:
+- if server returns "approval_code is too fresh", wait required seconds and retry execute
+5. If duplicate blocked:
 - wait for window or use `force_resend=true` only if user explicitly asked to resend.
 
 ## 4. Canonical Write Flow (Batch Mission)
