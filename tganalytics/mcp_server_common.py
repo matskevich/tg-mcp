@@ -15,6 +15,33 @@ from tganalytics.domain.groups import GroupManager
 from tganalytics.infra.tele_client import get_client, get_client_for_session
 
 
+def _expected_username() -> str:
+    raw = os.environ.get("TG_EXPECTED_USERNAME", "").strip().lstrip("@")
+    return raw.lower()
+
+
+def _build_session_mismatch_error(expected_username: str, actual_username: str | None, account_id: int | None) -> str:
+    expected = f"@{expected_username}"
+    actual_clean = (actual_username or "").strip()
+    actual = f"@{actual_clean}" if actual_clean else "<no_username>"
+    return (
+        f"Session mismatch: expected account {expected}, got {actual} (id={account_id}). "
+        "Set TG_SESSION_PATH to the correct session and restart MCP."
+    )
+
+
+def _validate_expected_account(me: Any) -> str | None:
+    expected = _expected_username()
+    if not expected:
+        return None
+
+    actual_username = (getattr(me, "username", None) or "").strip().lower()
+    actual_id = getattr(me, "id", None)
+    if actual_username != expected:
+        return _build_session_mismatch_error(expected, getattr(me, "username", None), actual_id)
+    return None
+
+
 class MCPServerContext:
     """Shared runtime state for MCP servers.
 
@@ -46,6 +73,13 @@ class MCPServerContext:
                 "Run create_telegram_session.py (or scripts/create_session_qr.py) to re-authenticate. "
                 "Telegram login code usually arrives in-app (SentCodeTypeApp), not SMS."
             )
+
+        me = await client.get_me()
+        mismatch_error = _validate_expected_account(me)
+        if mismatch_error:
+            await client.disconnect()
+            raise RuntimeError(mismatch_error)
+
         self._client = client
         self._current_session = session_name
         self._manager = GroupManager(client)
@@ -126,6 +160,10 @@ class MCPServerContext:
                     "username": getattr(me, "username", None),
                     "first_name": getattr(me, "first_name", None),
                 }
+                mismatch_error = _validate_expected_account(me)
+                if mismatch_error:
+                    payload["authorized"] = False
+                    payload["error"] = mismatch_error
             return payload
         except Exception as exc:
             return {

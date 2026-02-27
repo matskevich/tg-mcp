@@ -29,6 +29,7 @@ except Exception:  # pragma: no cover
 SESSION_DIR = Path(os.getenv("SESSION_DIR", "data/sessions"))
 SESSION_DIR.mkdir(parents=True, exist_ok=True)
 SESSION_LOCK_MODE = os.getenv("TG_SESSION_LOCK_MODE", "shared").strip().lower()
+RECEIVE_UPDATES = os.getenv("TG_RECEIVE_UPDATES", "0") == "1"
 
 WRITE_GUARD_ENABLED = os.getenv("TG_BLOCK_DIRECT_TELETHON_WRITE", "1") == "1"
 ALLOW_DIRECT_WRITE = os.getenv("TG_ALLOW_DIRECT_TELETHON_WRITE", "0") == "1"
@@ -359,7 +360,7 @@ def get_client():
         _acquire_session_lock(session_file)
         # Усиливаем права хранилища перед созданием клиента
         _harden_session_storage(SESSION_DIR, session_file)
-        _client = GuardedTelegramClient(session_path, api_id, api_hash)
+        _client = GuardedTelegramClient(session_path, api_id, api_hash, receive_updates=RECEIVE_UPDATES)
     return _client
 
 def get_client_for_session(custom_session_file_path: str):
@@ -382,7 +383,12 @@ def get_client_for_session(custom_session_file_path: str):
     if client is None:
         # Telethon appends .session automatically — strip it to avoid double extension
         session_name = str(resolved.with_suffix("")) if resolved.suffix == ".session" else str(resolved)
-        client = GuardedTelegramClient(session_name, api_id, api_hash)
+        client = GuardedTelegramClient(
+            session_name,
+            api_id,
+            api_hash,
+            receive_updates=RECEIVE_UPDATES,
+        )
         _clients_by_path[key] = client
     return client
 

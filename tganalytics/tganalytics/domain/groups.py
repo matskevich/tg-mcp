@@ -80,6 +80,64 @@ class GroupManager:
     
     def __init__(self, client: TelegramClient):
         self.client = client
+
+    async def _group_info_from_entity(self, entity: Union[Channel, Chat]) -> Dict[str, Any]:
+        """Build normalized group info payload from Telegram entity."""
+        participants_count = getattr(entity, 'participants_count', None)
+
+        # Если participants_count отсутствует или равен 0, пытаемся получить более точное число
+        if participants_count is None or participants_count == 0:
+            try:
+                # Для публичных каналов/групп пытаемся получить full info
+                async def get_full_info():
+                    if isinstance(entity, Channel):
+                        from telethon.tl.functions.channels import GetFullChannelRequest
+
+                        full_info = await self.client(GetFullChannelRequest(entity))
+                        return getattr(full_info.full_chat, 'participants_count', None)
+
+                    from telethon.tl.functions.messages import GetFullChatRequest
+
+                    full_info = await self.client(GetFullChatRequest(entity.id))
+                    return getattr(full_info.full_chat, 'participants_count', None)
+
+                full_participants_count = await _safe_api_call(get_full_info)
+                if full_participants_count is not None:
+                    participants_count = full_participants_count
+            except Exception as e:
+                logger.debug(f"Не удалось получить полную информацию о группе {entity.id}: {e}")
+
+        return {
+            'id': entity.id,
+            'title': entity.title,
+            'username': getattr(entity, 'username', None),
+            'participants_count': participants_count,
+            'type': 'channel' if isinstance(entity, Channel) else 'group'
+        }
+
+    async def _resolve_dialog_entity_by_title(self, group_title: str) -> Optional[Union[Channel, Chat]]:
+        """
+        Resolve a group by exact dialog title (case-insensitive).
+
+        Useful for UX where users provide "chat title" instead of @username/ID.
+        """
+        target = str(group_title or "").strip().lower()
+        if not target:
+            return None
+
+        async def iter_dialogs():
+            async for dialog in self.client.iter_dialogs(limit=300):
+                entity = getattr(dialog, "entity", None)
+                title = (getattr(entity, "title", None) or "").strip().lower()
+                if title == target and isinstance(entity, (Channel, Chat)):
+                    return entity
+            return None
+
+        try:
+            return await _safe_api_call(iter_dialogs)
+        except Exception as e:
+            logger.debug(f"Не удалось резолвить группу по title '{group_title}': {e}")
+            return None
     
     async def get_group_info(self, group_identifier: str) -> Optional[Dict[str, Any]]:
         """
@@ -94,6 +152,11 @@ class GroupManager:
         # Быстрая валидация перед API вызовом
         is_valid, error_msg = _validate_group_identifier(group_identifier)
         if not is_valid:
+            # UX fallback: allow group title input with spaces (e.g. "attia project").
+            if isinstance(group_identifier, str) and " " in group_identifier:
+                by_title = await self._resolve_dialog_entity_by_title(group_identifier)
+                if by_title:
+                    return await self._group_info_from_entity(by_title)
             logger.error(f"Validation failed: {error_msg}")
             return None
 
@@ -112,36 +175,7 @@ class GroupManager:
                 entity = await _safe_api_call(self.client.get_entity, group_identifier)
             
             if isinstance(entity, (Channel, Chat)):
-                # Получаем количество участников с дополнительной проверкой
-                participants_count = getattr(entity, 'participants_count', None)
-                
-                # Если participants_count отсутствует или равен 0, пытаемся получить более точное число
-                if participants_count is None or participants_count == 0:
-                    try:
-                        # Для публичных каналов/групп пытаемся получить full info
-                        async def get_full_info():
-                            if isinstance(entity, Channel):
-                                from telethon.tl.functions.channels import GetFullChannelRequest
-                                full_info = await self.client(GetFullChannelRequest(entity))
-                                return getattr(full_info.full_chat, 'participants_count', None)
-                            else:
-                                from telethon.tl.functions.messages import GetFullChatRequest
-                                full_info = await self.client(GetFullChatRequest(entity.id))
-                                return getattr(full_info.full_chat, 'participants_count', None)
-                        
-                        full_participants_count = await _safe_api_call(get_full_info)
-                        if full_participants_count is not None:
-                            participants_count = full_participants_count
-                    except Exception as e:
-                        logger.debug(f"Не удалось получить полную информацию о группе {entity.id}: {e}")
-                
-                return {
-                    'id': entity.id,
-                    'title': entity.title,
-                    'username': getattr(entity, 'username', None),
-                    'participants_count': participants_count,
-                    'type': 'channel' if isinstance(entity, Channel) else 'group'
-                }
+                return await self._group_info_from_entity(entity)
             
         except Exception as e:
             logger.error(f"Ошибка при получении информации о группе {group_identifier}: {e}")
@@ -1052,6 +1086,20 @@ class GroupManager:
         is_valid, error_msg = _validate_group_identifier(str(group_identifier))
         if not is_valid:
             raise ValueError(error_msg)
+
+        # Username target: allow both groups/channels and direct user dialogs.
+        # This keeps write actions usable for 1:1 assignment delivery via ActionMCP.
+        username_target = (
+            str(group_identifier)
+            if str(group_identifier).startswith('@')
+            else '@' + str(group_identifier)
+        )
+        try:
+            entity = await _safe_api_call(self.client.get_entity, username_target)
+            if isinstance(entity, (Channel, Chat, User)):
+                return entity
+        except Exception:
+            pass
 
         group_info = await self.get_group_info(str(group_identifier))
         if group_info:

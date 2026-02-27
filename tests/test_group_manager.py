@@ -4,6 +4,7 @@
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock
+from types import SimpleNamespace
 from telethon.errors import ChatAdminRequiredError, FloodWaitError
 from telethon.errors.rpcerrorlist import UserAlreadyParticipantError, UserNotParticipantError
 from tganalytics.domain.groups import GroupManager
@@ -52,6 +53,24 @@ async def test_get_group_info_not_found(mock_telegram_client):
     result = await group_manager.get_group_info("nonexistent")
     
     assert result is None
+
+
+@pytest.mark.asyncio
+async def test_get_group_info_resolves_dialog_title_with_spaces(mock_telegram_client, mock_channel):
+    """Тест fallback на title диалога, если передали имя группы с пробелами."""
+    from tests.conftest import AsyncIteratorMock
+
+    mock_channel.title = "attia project"
+    mock_telegram_client.iter_dialogs.return_value = AsyncIteratorMock(
+        [SimpleNamespace(entity=mock_channel)]
+    )
+
+    group_manager = GroupManager(mock_telegram_client)
+    result = await group_manager.get_group_info("attia project")
+
+    assert result is not None
+    assert result["id"] == mock_channel.id
+    assert result["title"] == "attia project"
 
 @pytest.mark.asyncio
 async def test_get_participants_success(mock_telegram_client, mock_channel, mock_participants_iterator):

@@ -8,73 +8,93 @@ import json
 from pathlib import Path
 
 
-def _build_read_server(repo: Path, server_name: str, session_name: str) -> dict:
+def _build_read_server(
+    repo: Path,
+    server_name: str,
+    session_name: str,
+    expected_username: str = "",
+) -> dict:
+    env = {
+        "PYTHONPATH": f"{(repo / 'tganalytics').resolve()}:{repo.resolve()}",
+        "TG_SESSIONS_DIR": str((repo / "data/sessions").resolve()),
+        "TG_SESSION_PATH": str((repo / f"data/sessions/{session_name}.session").resolve()),
+        "TG_ALLOW_SESSION_SWITCH": "0",
+        "TG_BLOCK_DIRECT_TELETHON_WRITE": "1",
+        "TG_ALLOW_DIRECT_TELETHON_WRITE": "0",
+        "TG_ENFORCE_ACTION_PROCESS": "1",
+        "TG_DIRECT_TELETHON_WRITE_ALLOWED_CONTEXTS": "actions_mcp",
+        "TG_WRITE_CONTEXT": "read_mcp",
+        "TG_ACTION_PROCESS": "0",
+        "TG_RECEIVE_UPDATES": "0",
+        "TG_SESSION_LOCK_MODE": "shared",
+        "TG_GLOBAL_RPS_MODE": "shared",
+        "TG_FLOOD_CIRCUIT_THRESHOLD_SEC": "300",
+        "TG_FLOOD_CIRCUIT_COOLDOWN_SEC": "900",
+    }
+    if expected_username:
+        env["TG_EXPECTED_USERNAME"] = expected_username
+
     return {
         server_name: {
             "command": str((repo / "venv/bin/python3").resolve()),
             "args": [str((repo / "tganalytics/mcp_server_read.py").resolve())],
-            "env": {
-                "PYTHONPATH": f"{(repo / 'tganalytics').resolve()}:{repo.resolve()}",
-                "TG_SESSIONS_DIR": str((repo / "data/sessions").resolve()),
-                "TG_SESSION_PATH": str((repo / f"data/sessions/{session_name}.session").resolve()),
-                "TG_ALLOW_SESSION_SWITCH": "0",
-                "TG_BLOCK_DIRECT_TELETHON_WRITE": "1",
-                "TG_ALLOW_DIRECT_TELETHON_WRITE": "0",
-                "TG_ENFORCE_ACTION_PROCESS": "1",
-                "TG_DIRECT_TELETHON_WRITE_ALLOWED_CONTEXTS": "actions_mcp",
-                "TG_WRITE_CONTEXT": "read_mcp",
-                "TG_ACTION_PROCESS": "0",
-                "TG_SESSION_LOCK_MODE": "shared",
-                "TG_GLOBAL_RPS_MODE": "shared",
-                "TG_FLOOD_CIRCUIT_THRESHOLD_SEC": "300",
-                "TG_FLOOD_CIRCUIT_COOLDOWN_SEC": "900",
-            },
+            "env": env,
         }
     }
 
 
-def _build_actions_server(repo: Path, server_name: str, session_name: str) -> dict:
+def _build_actions_server(
+    repo: Path,
+    server_name: str,
+    session_name: str,
+    expected_username: str = "",
+) -> dict:
+    env = {
+        "PYTHONPATH": f"{(repo / 'tganalytics').resolve()}:{repo.resolve()}",
+        "TG_SESSIONS_DIR": str((repo / "data/sessions").resolve()),
+        "TG_SESSION_PATH": str((repo / f"data/sessions/{session_name}.session").resolve()),
+        "TG_ALLOW_SESSION_SWITCH": "0",
+        "TG_ACTIONS_ENABLED": "1",
+        "TG_ACTIONS_REQUIRE_ALLOWLIST": "1",
+        "TG_ACTIONS_ALLOWED_GROUPS": "",
+        "TG_ACTIONS_MAX_MESSAGE_LEN": "2000",
+        "TG_ACTIONS_MAX_FILE_MB": "20",
+        "TG_ACTIONS_REQUIRE_CONFIRMATION_TEXT": "1",
+        "TG_ACTIONS_CONFIRMATION_PHRASE": "отправляй",
+        "TG_ACTIONS_MIN_CONFIRM_TEXT_LEN": "6",
+        "TG_ACTIONS_REQUIRE_APPROVAL_CODE": "1",
+        "TG_ACTIONS_APPROVAL_TTL_SEC": "1800",
+        "TG_ACTIONS_APPROVAL_MIN_AGE_SEC": "30",
+        "TG_ACTIONS_APPROVAL_FILE": str((repo / "data/anti_spam/action_approvals.json").resolve()),
+        "TG_ACTIONS_IDEMPOTENCY_ENABLED": "1",
+        "TG_ACTIONS_IDEMPOTENCY_WINDOW_SEC": "86400",
+        "TG_ACTIONS_IDEMPOTENCY_FILE": str((repo / "data/anti_spam/action_idempotency.json").resolve()),
+        "TG_ACTIONS_BATCH_FILE": str((repo / "data/anti_spam/action_batches.json").resolve()),
+        "TG_ACTIONS_BATCH_TTL_HOURS": "168",
+        "TG_ACTIONS_BATCH_APPROVAL_LEASE_SEC": "86400",
+        "TG_ACTIONS_BATCH_RUN_LEASE_SEC": "1800",
+        "TG_ACTIONS_UNSAFE_OVERRIDE": "0",
+        "TG_BLOCK_DIRECT_TELETHON_WRITE": "1",
+        "TG_ALLOW_DIRECT_TELETHON_WRITE": "0",
+        "TG_ENFORCE_ACTION_PROCESS": "1",
+        "TG_DIRECT_TELETHON_WRITE_ALLOWED_CONTEXTS": "actions_mcp",
+        "TG_WRITE_CONTEXT": "actions_mcp",
+        "TG_ACTION_PROCESS": "1",
+        "TG_RECEIVE_UPDATES": "0",
+        "TG_SESSION_LOCK_MODE": "shared",
+        "TG_GLOBAL_RPS_MODE": "shared",
+        "TG_FLOOD_CIRCUIT_THRESHOLD_SEC": "300",
+        "TG_FLOOD_CIRCUIT_COOLDOWN_SEC": "900",
+        "MAX_GROUP_MSGS_PER_DAY": "30",
+    }
+    if expected_username:
+        env["TG_EXPECTED_USERNAME"] = expected_username
+
     return {
         server_name: {
             "command": str((repo / "venv/bin/python3").resolve()),
             "args": [str((repo / "tganalytics/mcp_server_actions.py").resolve())],
-            "env": {
-                "PYTHONPATH": f"{(repo / 'tganalytics').resolve()}:{repo.resolve()}",
-                "TG_SESSIONS_DIR": str((repo / "data/sessions").resolve()),
-                "TG_SESSION_PATH": str((repo / f"data/sessions/{session_name}.session").resolve()),
-                "TG_ALLOW_SESSION_SWITCH": "0",
-                "TG_ACTIONS_ENABLED": "1",
-                "TG_ACTIONS_REQUIRE_ALLOWLIST": "1",
-                "TG_ACTIONS_ALLOWED_GROUPS": "",
-                "TG_ACTIONS_MAX_MESSAGE_LEN": "2000",
-                "TG_ACTIONS_MAX_FILE_MB": "20",
-                "TG_ACTIONS_REQUIRE_CONFIRMATION_TEXT": "1",
-                "TG_ACTIONS_CONFIRMATION_PHRASE": "отправляй",
-                "TG_ACTIONS_MIN_CONFIRM_TEXT_LEN": "6",
-                "TG_ACTIONS_REQUIRE_APPROVAL_CODE": "1",
-                "TG_ACTIONS_APPROVAL_TTL_SEC": "1800",
-                "TG_ACTIONS_APPROVAL_MIN_AGE_SEC": "30",
-                "TG_ACTIONS_APPROVAL_FILE": str((repo / "data/anti_spam/action_approvals.json").resolve()),
-                "TG_ACTIONS_IDEMPOTENCY_ENABLED": "1",
-                "TG_ACTIONS_IDEMPOTENCY_WINDOW_SEC": "86400",
-                "TG_ACTIONS_IDEMPOTENCY_FILE": str((repo / "data/anti_spam/action_idempotency.json").resolve()),
-                "TG_ACTIONS_BATCH_FILE": str((repo / "data/anti_spam/action_batches.json").resolve()),
-                "TG_ACTIONS_BATCH_TTL_HOURS": "168",
-                "TG_ACTIONS_BATCH_APPROVAL_LEASE_SEC": "86400",
-                "TG_ACTIONS_BATCH_RUN_LEASE_SEC": "1800",
-                "TG_ACTIONS_UNSAFE_OVERRIDE": "0",
-                "TG_BLOCK_DIRECT_TELETHON_WRITE": "1",
-                "TG_ALLOW_DIRECT_TELETHON_WRITE": "0",
-                "TG_ENFORCE_ACTION_PROCESS": "1",
-                "TG_DIRECT_TELETHON_WRITE_ALLOWED_CONTEXTS": "actions_mcp",
-                "TG_WRITE_CONTEXT": "actions_mcp",
-                "TG_ACTION_PROCESS": "1",
-                "TG_SESSION_LOCK_MODE": "shared",
-                "TG_GLOBAL_RPS_MODE": "shared",
-                "TG_FLOOD_CIRCUIT_THRESHOLD_SEC": "300",
-                "TG_FLOOD_CIRCUIT_COOLDOWN_SEC": "900",
-                "MAX_GROUP_MSGS_PER_DAY": "30",
-            },
+            "env": env,
         }
     }
 
@@ -92,14 +112,33 @@ def main() -> int:
     parser.add_argument("--actions-server-name", default="tgmcp-actions")
     parser.add_argument("--read-session-name", default="read_only_session")
     parser.add_argument("--actions-session-name", default="actions_session")
+    parser.add_argument(
+        "--expected-username",
+        default="",
+        help="Optional expected @username for session fail-fast checks (example: dmatskevich)",
+    )
     parser.add_argument("--output", help="Write result to file; default stdout")
     args = parser.parse_args()
 
     repo = Path(args.repo).expanduser().resolve()
     servers = {}
-    servers.update(_build_read_server(repo, args.read_server_name, args.read_session_name))
+    servers.update(
+        _build_read_server(
+            repo,
+            args.read_server_name,
+            args.read_session_name,
+            expected_username=args.expected_username,
+        )
+    )
     if args.profile == "full":
-        servers.update(_build_actions_server(repo, args.actions_server_name, args.actions_session_name))
+        servers.update(
+            _build_actions_server(
+                repo,
+                args.actions_server_name,
+                args.actions_session_name,
+                expected_username=args.expected_username,
+            )
+        )
 
     payload = {"mcpServers": servers}
     text = json.dumps(payload, indent=2, ensure_ascii=False) + "\n"

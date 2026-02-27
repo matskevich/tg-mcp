@@ -36,7 +36,9 @@ def test_create_add_member_batch_record_dedup_and_policy(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_batch_approval_expiry_requires_reapprove(monkeypatch, tmp_path):
+    monkeypatch.setattr(actions, "SAFE_STARTUP_BLOCK_REASON", None)
     monkeypatch.setattr(actions, "ACTIONS_ENABLED", True)
+    monkeypatch.setattr(actions, "REQUIRE_ALLOWLIST", False)
     monkeypatch.setattr(actions, "BATCH_FILE", tmp_path / "batches.json")
     monkeypatch.setattr(actions, "BATCH_APPROVAL_LEASE_SEC", 86400)
     monkeypatch.setattr(actions, "REQUIRE_CONFIRMATION_TEXT", False)
@@ -71,7 +73,9 @@ async def test_batch_approval_expiry_requires_reapprove(monkeypatch, tmp_path):
 
 @pytest.mark.asyncio
 async def test_batch_run_lock_blocks_parallel_worker(monkeypatch, tmp_path):
+    monkeypatch.setattr(actions, "SAFE_STARTUP_BLOCK_REASON", None)
     monkeypatch.setattr(actions, "ACTIONS_ENABLED", True)
+    monkeypatch.setattr(actions, "REQUIRE_ALLOWLIST", False)
     monkeypatch.setattr(actions, "BATCH_FILE", tmp_path / "batches.json")
     monkeypatch.setattr(actions, "BATCH_RUN_LEASE_SEC", 1800)
     monkeypatch.setattr(actions.time, "time", lambda: 100)

@@ -138,6 +138,7 @@ codex mcp add tgmcp-read \
   --env PYTHONPATH="$REPO/tganalytics:$REPO" \
   --env TG_SESSIONS_DIR="$REPO/data/sessions" \
   --env TG_SESSION_PATH="$REPO/data/sessions/my_read.session" \
+  --env TG_EXPECTED_USERNAME="my_main_account" \
   --env TG_ALLOW_SESSION_SWITCH=0 \
   --env TG_BLOCK_DIRECT_TELETHON_WRITE=1 \
   --env TG_ALLOW_DIRECT_TELETHON_WRITE=0 \
@@ -145,6 +146,7 @@ codex mcp add tgmcp-read \
   --env TG_DIRECT_TELETHON_WRITE_ALLOWED_CONTEXTS=actions_mcp \
   --env TG_WRITE_CONTEXT=read_mcp \
   --env TG_ACTION_PROCESS=0 \
+  --env TG_RECEIVE_UPDATES=0 \
   --env TG_SESSION_LOCK_MODE=shared \
   --env TG_GLOBAL_RPS_MODE=shared \
   -- "$REPO/venv/bin/python3" "$REPO/tganalytics/mcp_server_read.py"
@@ -159,10 +161,11 @@ codex mcp add tgmcp-actions \
   --env PYTHONPATH="$REPO/tganalytics:$REPO" \
   --env TG_SESSIONS_DIR="$REPO/data/sessions" \
   --env TG_SESSION_PATH="$REPO/data/sessions/my_actions.session" \
+  --env TG_EXPECTED_USERNAME="my_main_account" \
   --env TG_ALLOW_SESSION_SWITCH=0 \
   --env TG_ACTIONS_ENABLED=1 \
   --env TG_ACTIONS_REQUIRE_ALLOWLIST=1 \
-  --env TG_ACTIONS_ALLOWED_GROUPS="" \
+  --env TG_ACTIONS_ALLOWED_GROUPS="-1001234567890" \
   --env TG_ACTIONS_REQUIRE_CONFIRMATION_TEXT=1 \
   --env TG_ACTIONS_REQUIRE_APPROVAL_CODE=1 \
   --env TG_ACTIONS_IDEMPOTENCY_ENABLED=1 \
@@ -172,6 +175,7 @@ codex mcp add tgmcp-actions \
   --env TG_DIRECT_TELETHON_WRITE_ALLOWED_CONTEXTS=actions_mcp \
   --env TG_WRITE_CONTEXT=actions_mcp \
   --env TG_ACTION_PROCESS=1 \
+  --env TG_RECEIVE_UPDATES=0 \
   --env TG_SESSION_LOCK_MODE=shared \
   --env TG_GLOBAL_RPS_MODE=shared \
   -- "$REPO/venv/bin/python3" "$REPO/tganalytics/mcp_server_actions.py"
@@ -190,6 +194,7 @@ Add to your project's `.mcp.json`:
         "PYTHONPATH": "path/to/tg-mcp/tganalytics:path/to/tg-mcp",
         "TG_SESSIONS_DIR": "path/to/tg-mcp/data/sessions",
         "TG_SESSION_PATH": "path/to/tg-mcp/data/sessions/my_read.session",
+        "TG_EXPECTED_USERNAME": "my_main_account",
         "TG_ALLOW_SESSION_SWITCH": "0",
         "TG_BLOCK_DIRECT_TELETHON_WRITE": "1",
         "TG_ALLOW_DIRECT_TELETHON_WRITE": "0",
@@ -197,6 +202,7 @@ Add to your project's `.mcp.json`:
         "TG_DIRECT_TELETHON_WRITE_ALLOWED_CONTEXTS": "actions_mcp",
         "TG_WRITE_CONTEXT": "read_mcp",
         "TG_ACTION_PROCESS": "0",
+        "TG_RECEIVE_UPDATES": "0",
         "TG_SESSION_LOCK_MODE": "shared",
         "TG_GLOBAL_RPS_MODE": "shared"
       }
@@ -208,6 +214,7 @@ Add to your project's `.mcp.json`:
         "PYTHONPATH": "path/to/tg-mcp/tganalytics:path/to/tg-mcp",
         "TG_SESSIONS_DIR": "path/to/tg-mcp/data/sessions",
         "TG_SESSION_PATH": "path/to/tg-mcp/data/sessions/my_actions.session",
+        "TG_EXPECTED_USERNAME": "my_main_account",
         "TG_ALLOW_SESSION_SWITCH": "0",
         "TG_ACTIONS_ENABLED": "1",
         "TG_ACTIONS_REQUIRE_ALLOWLIST": "1",
@@ -234,6 +241,7 @@ Add to your project's `.mcp.json`:
         "TG_DIRECT_TELETHON_WRITE_ALLOWED_CONTEXTS": "actions_mcp",
         "TG_WRITE_CONTEXT": "actions_mcp",
         "TG_ACTION_PROCESS": "1",
+        "TG_RECEIVE_UPDATES": "0",
         "TG_SESSION_LOCK_MODE": "shared",
         "TG_GLOBAL_RPS_MODE": "shared",
         "TG_FLOOD_CIRCUIT_THRESHOLD_SEC": "300",
@@ -294,6 +302,8 @@ Add to your project's `.mcp.json`:
 - Default mode is `TG_SESSION_LOCK_MODE=shared`: multiple MCP servers/projects can use one `.session`.
 - Optional strict mode: `TG_SESSION_LOCK_MODE=exclusive` blocks concurrent use of the same session.
 - For production safety, prefer separate sessions for Read and Actions even if shared mode is allowed.
+- `TG_EXPECTED_USERNAME` enables fail-fast on session/account mismatch (`@expected` vs actual account in session).
+- `TG_RECEIVE_UPDATES=0` (default) disables Telethon updates loop to reduce sqlite session lock contention.
 - `TG_GLOBAL_RPS_MODE=shared` applies one shared RPS budget across all processes using the same `data/anti_spam`.
 - `TG_FLOOD_CIRCUIT_THRESHOLD_SEC` + `TG_FLOOD_CIRCUIT_COOLDOWN_SEC` pause all calls after critical FLOOD_WAIT.
 - Non-dry-run write actions require `confirm=true` and exact `confirmation_text` (`TG_ACTIONS_CONFIRMATION_PHRASE`).
@@ -305,6 +315,7 @@ Add to your project's `.mcp.json`:
 - For long tasks, batch mode supports scoped approval: `tg_create_add_member_batch` -> `tg_approve_batch` -> repeat `tg_run_add_member_batch` until complete.
 - Batch run permission is time-limited (`TG_ACTIONS_BATCH_APPROVAL_LEASE_SEC`, default 24h). After lease expiry, re-approve the same batch.
 - ActionMCP is fail-closed by default: weakening core safe flags auto-disables actions unless `TG_ACTIONS_UNSAFE_OVERRIDE=1`.
+- If allowlist is required, ActionMCP also fails closed when `TG_ACTIONS_ALLOWED_GROUPS` is empty.
 - Direct `TelegramClient.send_*` writes and raw MTProto write requests (`client(Request)`) are blocked by default.
 - Use `tgmcp-actions` tools for any write operation.
 - In strict mode (`TG_ENFORCE_ACTION_PROCESS=1`), write is allowed only when process entrypoint is `mcp_server_actions.py`.

@@ -49,6 +49,8 @@ def detect_unsafe_defaults(
         issues.append("TG_ENFORCE_ACTION_PROCESS must be 1")
     if not require_allowlist:
         issues.append("TG_ACTIONS_REQUIRE_ALLOWLIST must be 1")
+    elif not parse_allowlist(env.get("TG_ACTIONS_ALLOWED_GROUPS", "")):
+        issues.append("TG_ACTIONS_ALLOWED_GROUPS must not be empty when allowlist is required")
     if not require_confirmation_text:
         issues.append("TG_ACTIONS_REQUIRE_CONFIRMATION_TEXT must be 1")
     if not require_approval_code:

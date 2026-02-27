@@ -17,8 +17,10 @@ class _FakeCtx:
 
 @pytest.mark.asyncio
 async def test_send_message_requires_exact_confirmation_text(monkeypatch, tmp_path):
+    monkeypatch.setattr(actions, "SAFE_STARTUP_BLOCK_REASON", None)
     monkeypatch.setattr(actions, "ACTIONS_ENABLED", True)
-    monkeypatch.setattr(actions, "REQUIRE_ALLOWLIST", False)
+    monkeypatch.setattr(actions, "REQUIRE_ALLOWLIST", True)
+    monkeypatch.setattr(actions, "ALLOWED_TARGETS", {"test_target"})
     monkeypatch.setattr(actions, "REQUIRE_CONFIRMATION_TEXT", True)
     monkeypatch.setattr(actions, "CONFIRMATION_PHRASE", "отправляй")
     monkeypatch.setattr(actions, "REQUIRE_APPROVAL_CODE", False)
@@ -39,8 +41,10 @@ async def test_send_message_requires_exact_confirmation_text(monkeypatch, tmp_pa
 
 @pytest.mark.asyncio
 async def test_send_message_requires_one_time_approval_code(monkeypatch, tmp_path):
+    monkeypatch.setattr(actions, "SAFE_STARTUP_BLOCK_REASON", None)
     monkeypatch.setattr(actions, "ACTIONS_ENABLED", True)
-    monkeypatch.setattr(actions, "REQUIRE_ALLOWLIST", False)
+    monkeypatch.setattr(actions, "REQUIRE_ALLOWLIST", True)
+    monkeypatch.setattr(actions, "ALLOWED_TARGETS", {"test_target"})
     monkeypatch.setattr(actions, "REQUIRE_CONFIRMATION_TEXT", True)
     monkeypatch.setattr(actions, "CONFIRMATION_PHRASE", "отправляй")
     monkeypatch.setattr(actions, "REQUIRE_APPROVAL_CODE", True)
@@ -94,8 +98,10 @@ async def test_send_message_requires_one_time_approval_code(monkeypatch, tmp_pat
 
 @pytest.mark.asyncio
 async def test_send_message_blocks_immediate_execute_after_dry_run(monkeypatch, tmp_path):
+    monkeypatch.setattr(actions, "SAFE_STARTUP_BLOCK_REASON", None)
     monkeypatch.setattr(actions, "ACTIONS_ENABLED", True)
-    monkeypatch.setattr(actions, "REQUIRE_ALLOWLIST", False)
+    monkeypatch.setattr(actions, "REQUIRE_ALLOWLIST", True)
+    monkeypatch.setattr(actions, "ALLOWED_TARGETS", {"test_target"})
     monkeypatch.setattr(actions, "REQUIRE_CONFIRMATION_TEXT", True)
     monkeypatch.setattr(actions, "CONFIRMATION_PHRASE", "отправляй")
     monkeypatch.setattr(actions, "REQUIRE_APPROVAL_CODE", True)

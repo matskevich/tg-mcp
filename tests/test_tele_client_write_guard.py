@@ -99,3 +99,25 @@ def test_enforce_action_process_allows_real_action_process(monkeypatch):
     monkeypatch.setattr(tele_client, "_is_actions_process", lambda: True)
 
     assert tele_client._is_direct_write_allowed() is True
+
+
+def test_get_client_disables_updates_loop_by_default(monkeypatch, tmp_path):
+    captured = {}
+
+    class DummyClient:
+        def __init__(self, session, api_id, api_hash, **kwargs):
+            captured["session"] = session
+            captured["kwargs"] = kwargs
+
+    monkeypatch.setattr(tele_client, "_client", None)
+    monkeypatch.setattr(tele_client, "_clients_by_path", {})
+    monkeypatch.setattr(tele_client, "SESSION_DIR", tmp_path)
+    monkeypatch.setattr(tele_client, "session_path", str(tmp_path / "test_session"))
+    monkeypatch.setattr(tele_client, "RECEIVE_UPDATES", False)
+    monkeypatch.setattr(tele_client, "_acquire_session_lock", lambda *_: None)
+    monkeypatch.setattr(tele_client, "_harden_session_storage", lambda *_: None)
+    monkeypatch.setattr(tele_client, "GuardedTelegramClient", DummyClient)
+
+    tele_client.get_client()
+
+    assert captured["kwargs"]["receive_updates"] is False
